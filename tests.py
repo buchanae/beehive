@@ -138,41 +138,54 @@ def test_simple_connection():
     # TODO redo this to use BrokerChannel
 
     broker = Broker()
-    broker.bind('inproc://test_register_worker')
+    broker_channel.bind('inproc://test_register_worker')
 
     # TODO optimize
     # TODO better to pass context to broker, or use context created by broker?
     #      probably better to have the option to pass in a context
-    socket = broker.context.socket(zmq.DEALER)
     socket.connect('inproc://test_register_worker')
 
 
-def test_register_worker():
+def test_register_unregister_worker():
     broker = Broker()
-
     worker_address = 'worker1'
     empty_frame = ''
+    service_name = 'test_service'
+
+    # Send a message to the broker telling it to register worker1 for test_service
     msg = [worker_address, empty_frame, opcodes.REQUEST,
-           'beehive.management.register_worker', 'test_service']
+           'beehive.management.register_worker', service_name]
 
     broker.on_message(msg)
 
+    # Check that the broker is now tracking the worker and the service
     eq_(len(broker.workers), 1)
 
-    eq_(broker.services.keys(), ['test_service'])
-    eq_(broker.workers.keys(), ['worker1'])
+    eq_(broker.services.keys(), [service_name])
+    eq_(broker.workers.keys(), [worker_address])
 
-    # TODO test available services?
+    # Get the Worker and Service objects from the broker
+    worker = broker.workers[worker_address]
+    service = broker.services[service_name]
+
+    # Check that the worker is in the service's queue
+    eq_(service.waiting, [worker])
+    eq_(worker.service, service)
+    eq_(worker.working, True)
+
+    # Now send a message to the broker telling it to unregister the worker
+    msg = [worker_address, empty_frame, opcodes.REQUEST,
+           'beehive.management.unregister_worker', service_name]
+
+    broker.on_message(msg)
+    eq_(broker.workers, {})
+    # The service stays registered, even though it doesn't have any workers
+    eq_(broker.services.keys(), [service_name])
+    eq_(service.waiting, [])
 
 
-def test_unregister_worker():
+def test_register_duplicate_worker():
     raise SkipTest()
-    broker = beehive.Broker('inproc://TODO')
-    test_messager = TODO('inproc://TODO')
-
-    worker = Worker('worker1', 'service1')
-    test_messager.unregister_worker(worker)
-
 
 def test_unregister_unknown_worker():
-    pass
+    raise SkipTest()

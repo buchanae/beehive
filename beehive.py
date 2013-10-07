@@ -42,6 +42,7 @@ class Worker(object):
             self._working = False
             self.service.remove_worker(self)
 
+    # TODO so far, these aren't actually needed
     @property
     def _key(self):
         return self.address, self.service
@@ -98,6 +99,7 @@ class opcodes:
 
 
 class ZMQBrokerChannel(object):
+    # TODO how does this handle response communication from the broker?
     
     def __init__(self, broker):
         self.broker = broker
@@ -206,7 +208,7 @@ class Broker(object):
                 self.send_to_worker(worker, request)
 
 
-    def on_register(self, sender, message):
+    def on_register(self, worker_address, message):
         service_name = message.pop(0)
 
         if service_name.startswith(self.INTERNAL_SERVICE_PREFIX):
@@ -220,7 +222,7 @@ class Broker(object):
 
         # TODO what happens when you register two workers with the same identity
         #      what does zmq do about duplicate identities connecting to a router?
-        worker = Worker(sender, service)
+        worker = Worker(worker_address, service)
 
         try:
             self.add_worker(worker)
@@ -241,12 +243,12 @@ class Broker(object):
             raise MultipleRegistrationError(msg)
 
 
-    def on_unregister(self, sender):
-        worker_address = 'TODO'
-
-        worker = self.workers.get(worker_address)
-        if worker:
+    def on_unregister(self, worker_address, message):
+        try:
+            worker = self.workers[worker_address]
             self.remove_worker(worker)
+        except KeyError:
+            pass
 
 
     def on_reply(self, sender):
