@@ -90,10 +90,10 @@ def test_service():
     eq_(list(s.work()), [])
 
     # Add a request
-    s.add_request('request1')
+    s.add_request('reply_address', 'request1')
 
     # Now there's work to be done
-    eq_(list(s.work()), [('request1', 'worker1')])
+    eq_(list(s.work()), [(('reply_address', 'request1'), 'worker1')])
 
     # Getting the work removes it, so now there's no work
     eq_(list(s.work()), [])
@@ -236,7 +236,7 @@ def test_client_request():
     worker = broker.workers[worker_address]
 
     eq_(service.waiting, [])
-    listener.assert_called_once_with(worker_address, request_body)
+    listener.assert_called_once_with(worker_address, (client_address, request_body))
 
     listener.reset_mock()
 
@@ -275,7 +275,7 @@ def test_worker_reply_processes_next_request():
            'beehive.management.register_worker', service_name]
     broker.on_message(msg)
 
-    listener.assert_called_once_with(worker_address, request_1_body)
+    listener.assert_called_once_with(worker_address, (client_address, request_1_body))
 
     listener.reset_mock()
 
@@ -286,7 +286,7 @@ def test_worker_reply_processes_next_request():
     # The reply will be forwarded to the client,
     # and the second request will be sent to the worker.
     eq_(listener.mock_calls, [call(client_address, reply_1_body),
-                              call(worker_address, request_2_body)])
+                              call(worker_address, (client_address, request_2_body))])
 
 
 def test_worker_registration_processes_queue_request():
@@ -312,12 +312,38 @@ def test_worker_registration_processes_queue_request():
     broker.on_message(msg)
 
     # Assert that the client's request was sent to the worker
-    listener.assert_called_once_with(worker_address, request_body)
+    listener.assert_called_once_with(worker_address, (client_address, request_body))
+
+
+def test_two_clients():
+    broker = Broker()
+    listener = Mock()
+    broker.on_send.add(listener)
 
 
 def test_service_request_queue():
-    # Show that requests are queued up per service when there are no workers
-    raise SkipTest()
+    broker = Broker()
+    listener = Mock()
+    broker.on_send.add(listener)
+
+    # Queue a request
+    empty_frame = ''
+    client_address = 'client1'
+    request_body = 'request 1'
+    service_name = 'test_service'
+
+    header = [client_address, empty_frame, opcodes.REQUEST, service_name]
+
+    broker.on_message(header + [request_body])
+
+    # When a request is sent for a service that doesn't have any workers,
+    # that request is queued.
+
+    service = broker.services[service_name]
+    eq_(service.requests, [('client1', 'request 1')])
+
+    # TODO these requests should be dropped after some interval
+
 
 def test_register_reserved_name():
     raise SkipTest()

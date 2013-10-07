@@ -65,17 +65,18 @@ class Service(object):
     def remove_worker(self, worker):
         self.worker_queue.remove(worker)
 
-    def add_request(self, request):
-        self.request_queue.append(request)
-
-    def remove_request(self, request):
-        self.request_queue.remove(request)
+    def add_request(self, reply_address, request):
+        self.request_queue.append((reply_address, request))
 
     def work(self):
         while self.request_queue and self.worker_queue:
             request = self.request_queue.popleft()
             worker = self.worker_queue.popleft()
             yield request, worker
+
+    @property
+    def requests(self):
+        return list(self.request_queue)
 
     # TODO change name to idle
     @property
@@ -177,10 +178,11 @@ class Broker(object):
             raise InvalidCommand()
 
         # TODO necessary?
-        # TODO how to do work no a regular interval with this new separation
+        # TODO how to do work on a regular interval with this new separation
         #      of message channel and broker?
         #self.purge_workers()
         #self.heartbeat()
+
 
     def add_worker(self, worker):
         if worker.address in self.workers:
@@ -190,6 +192,7 @@ class Broker(object):
         worker.available = True
 
         # TODO this is duplicated with on_request. need some organization here.
+        # TODO consider moving this to Service.on_work that Broker subscribes to
         for request, worker in worker.service.work():
             self.send(worker.address, request)
 
@@ -253,9 +256,9 @@ class Broker(object):
 
         except KeyError:
             # The request is for an external service
-            # TODO message?
             service = self.services[service_name]
-            service.add_request(request_body)
+            # TODO wtf? this is broken. losing track of the client address
+            service.add_request(client_address, request_body)
 
            # TODO  self.purge_workers()
             
