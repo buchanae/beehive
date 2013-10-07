@@ -4,10 +4,6 @@ import zmq
 from zmq.eventloop.ioloop import IOLoop
 from zmq.eventloop.zmqstream import ZMQStream
 
-# TODO could try to route by proximity. workers could handle multiple types of tasks,
-#      and if a worker is available on the client's host, choose that one, which could
-#      avoid the network overhead of streaming large amounts of data (if i ever decide
-#      to do that).
 
 # TODO service names. need a queue for each service
 #      - service registry/discovery

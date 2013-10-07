@@ -1,0 +1,23 @@
+zeromq vs sge
+=============
+
+seems like the work can be accomplished with both, and sge already exists,
+so what's the argument for zeromq?
+
+full communication with services
+
+less overhead in job submission
+
+application is self contained. can run on laptop without sge. sge is just for starting
+services (resource allocation)
+
+
+
+todo
+====
+
+test/simulation harness
+
+job IDs, retries, and futures
+
+what happens to replies that are never retrieved by the client?
