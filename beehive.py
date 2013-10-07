@@ -189,6 +189,10 @@ class Broker(object):
         self.workers[worker.address] = worker
         worker.available = True
 
+        # TODO this is duplicated with on_request. need some organization here.
+        for request, worker in worker.service.work():
+            self.send(worker.address, request)
+
 
     def remove_worker(self, worker):
         # TODO catch KeyError here
@@ -199,6 +203,7 @@ class Broker(object):
 
     def on_register(self, worker_address, service_name):
 
+        # TODO move to add_worker?
         if service_name.startswith(self.INTERNAL_SERVICE_PREFIX):
             msg = self.INTERNAL_SERVICE_PREFIX + '.* is reserved for internal sevices'
             raise ReservedNameError(msg)
@@ -266,8 +271,9 @@ class Broker(object):
         worker = self.workers[worker_address]
         worker.available = True
 
-        # TODO shouldn't the next job for this service be processed now that
-        #      a worker is available?
+        # TODO this is duplicated with on_request. need some organization here.
+        for request, worker in worker.service.work():
+            self.send(worker.address, request)
 
 
     def on_list(self, sender):

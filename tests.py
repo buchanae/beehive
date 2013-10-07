@@ -1,4 +1,4 @@
-from mock import Mock, patch
+from mock import call, Mock, patch
 from nose.tools import assert_raises, eq_, ok_
 from nose.plugins.skip import SkipTest
 import zmq
@@ -204,6 +204,8 @@ def test_send_listener():
     listener.assert_called_once_with('address', 'message')
 
 
+# TODO if the broker ever became multithreaded/evented, this model for testing
+#      might not work anymore
 def test_client_request():
     broker = Broker()
     listener = Mock()
@@ -248,6 +250,69 @@ def test_client_request():
     # Now the the worker has responded, it should be made available for more work
     # i.e. be in the service's waiting queue
     eq_(service.waiting, [worker])
+
+
+def test_worker_reply_processes_next_request():
+    broker = Broker()
+    listener = Mock()
+    broker.on_send.add(listener)
+
+    # Queue up two requests
+    empty_frame = ''
+    client_address = 'client1'
+    worker_address = 'worker1'
+    request_1_body = 'request 1'
+    request_2_body = 'request 2'
+    reply_1_body = 'reply 1'
+    service_name = 'test_service'
+
+    header = [client_address, empty_frame, opcodes.REQUEST, service_name]
+    broker.on_message(header + [request_1_body])
+    broker.on_message(header + [request_2_body])
+
+    # Add a worker. The first request is immediately sent to the worker.
+    msg = [worker_address, empty_frame, opcodes.REQUEST,
+           'beehive.management.register_worker', service_name]
+    broker.on_message(msg)
+
+    listener.assert_called_once_with(worker_address, request_1_body)
+
+    listener.reset_mock()
+
+    # Simulate the worker's reply.
+    msg = [worker_address, empty_frame, opcodes.REPLY, client_address, reply_1_body]
+    broker.on_message(msg)
+
+    # The reply will be forwarded to the client,
+    # and the second request will be sent to the worker.
+    eq_(listener.mock_calls, [call(client_address, reply_1_body),
+                              call(worker_address, request_2_body)])
+
+
+def test_worker_registration_processes_queue_request():
+    broker = Broker()
+    listener = Mock()
+    broker.on_send.add(listener)
+
+    # Queue a request
+    empty_frame = ''
+    client_address = 'client1'
+    worker_address = 'worker1'
+    request_body = 'request 1'
+    service_name = 'test_service'
+
+    header = [client_address, empty_frame, opcodes.REQUEST, service_name]
+
+    broker.on_message(header + [request_body])
+
+    # Add a worker. The worker should immediately process the first request.
+    msg = [worker_address, empty_frame, opcodes.REQUEST,
+           'beehive.management.register_worker', service_name]
+
+    broker.on_message(msg)
+
+    # Assert that the client's request was sent to the worker
+    listener.assert_called_once_with(worker_address, request_body)
 
 
 def test_service_request_queue():
