@@ -1,4 +1,4 @@
-from mock import patch
+from mock import Mock, patch
 from nose.tools import assert_raises, eq_, ok_
 from nose.plugins.skip import SkipTest
 import zmq
@@ -189,3 +189,16 @@ def test_register_duplicate_worker():
 
 def test_unregister_unknown_worker():
     raise SkipTest()
+
+
+def test_send_listener():
+    # Set up a broker and add a "send" listener
+    broker = Broker()
+    listener = Mock()
+    broker.on_send.add(listener)
+
+    # The broker sends a message...
+    broker.send('some message')
+
+    # ...and the message is passed to the send listeners
+    listener.assert_called_once_with('some message')

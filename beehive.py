@@ -145,6 +145,10 @@ class Broker(object):
         self.services = defaultdict(Service)
         self.workers = {}
 
+        # TODO need to think about renaming a lot of this stuff
+        # TODO this is unordered. would order ever matter?
+        self.on_send = set()
+
     def internal_service(self, name, callback):
         name = self.INTERNAL_SERVICE_PREFIX + '.' + name
         self._internal_services[name] = callback
@@ -152,6 +156,10 @@ class Broker(object):
     def destroy(self):
         # TODO
         pass
+
+    def send(self, message):
+        for listener in self.on_send:
+            listener(message)
 
     # TODO consider changing these names. on_foo is more of
     #      an event handler _registration_ convention than an event handler name
