@@ -23,27 +23,27 @@ def test_worker_equality():
     assert c != d
 
 
-def test_worker_working():
+def test_worker_available():
     service = Service()
     worker = Worker('address', service)
 
-    eq_(worker.working, False)
+    eq_(worker.available, False)
     eq_(service.waiting, [])
 
-    # When worker.working is set to True,
+    # When worker.available is set to True,
     # the worker adds itself to its service's queue
-    worker.working = True
+    worker.available = True
     eq_(service.waiting, [worker])
 
-    # This looks like a funny thing to test, but since Worker.working is a property
+    # This looks like a funny thing to test, but since Worker.available is a property
     # I want to make sure it returns the proper value.
-    eq_(worker.working, True)
+    eq_(worker.available, True)
 
-    # When worker.working is set to False,
+    # When worker.available is set to False,
     # the worker removes itself from its service's queue
-    worker.working = False
+    worker.available = False
     eq_(service.waiting, [])
-    eq_(worker.working, False)
+    eq_(worker.available, False)
 
 
 @patch('time.time')
@@ -171,7 +171,7 @@ def test_register_unregister_worker():
     # Check that the worker is in the service's queue
     eq_(service.waiting, [worker])
     eq_(worker.service, service)
-    eq_(worker.working, True)
+    eq_(worker.available, True)
 
     # Now send a message to the broker telling it to unregister the worker
     msg = [worker_address, empty_frame, opcodes.REQUEST,
@@ -198,7 +198,64 @@ def test_send_listener():
     broker.on_send.add(listener)
 
     # The broker sends a message...
-    broker.send('some message')
+    broker.send('address', 'message')
 
     # ...and the message is passed to the send listeners
-    listener.assert_called_once_with('some message')
+    listener.assert_called_once_with('address', 'message')
+
+
+def test_client_request():
+    broker = Broker()
+    listener = Mock()
+    broker.on_send.add(listener)
+
+    # Register a worker
+    worker_address = 'worker1'
+    empty_frame = ''
+    service_name = 'test_service'
+
+    # Send a message to the broker telling it to register worker1 for test_service
+    msg = [worker_address, empty_frame, opcodes.REQUEST,
+           'beehive.management.register_worker', service_name]
+
+    broker.on_message(msg)
+
+    # Make a request of that worker/service from a client
+    client_address = 'client1'
+    empty_frame = ''
+    request_body = 'foo'
+
+    msg = [client_address, empty_frame, opcodes.REQUEST, service_name, request_body]
+    broker.on_message(msg)
+
+    # The broker should have sent the request to the worker and changed some state
+    # so that the worker is no longer in the service's waiting queue
+    service = broker.services[service_name]
+    worker = broker.workers[worker_address]
+
+    eq_(service.waiting, [])
+    listener.assert_called_once_with(worker_address, request_body)
+
+    listener.reset_mock()
+
+    # Simulate the worker's reply
+    reply_body = 'reply foo'
+    msg = [worker_address, empty_frame, opcodes.REPLY, client_address, reply_body]
+    broker.on_message(msg)
+
+    listener.assert_called_once_with(client_address, reply_body)
+
+    # Now the the worker has responded, it should be made available for more work
+    # i.e. be in the service's waiting queue
+    eq_(service.waiting, [worker])
+
+
+def test_service_request_queue():
+    # Show that requests are queued up per service when there are no workers
+    raise SkipTest()
+
+def test_register_reserved_name():
+    raise SkipTest()
+
+def test_unknown_service():
+    raise SkipTest()

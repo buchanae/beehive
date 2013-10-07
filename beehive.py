@@ -20,7 +20,7 @@ class Worker(object):
         # TODO bad name
         self.expiry_interval = expiry_interval
         self.heartbeat()
-        self._working = False
+        self._available = False
 
     @property
     def expired(self):
@@ -30,16 +30,16 @@ class Worker(object):
         self.expiry = time.time() + self.expiry_interval
 
     @property
-    def working(self):
-        return self._working
+    def available(self):
+        return self._available
 
-    @working.setter
-    def working(self, value):
+    @available.setter
+    def available(self, value):
         if value:
-            self._working = True
+            self._available = True
             self.service.add_worker(self)
         else:
-            self._working = False
+            self._available = False
             self.service.remove_worker(self)
 
     # TODO so far, these aren't actually needed
@@ -157,9 +157,9 @@ class Broker(object):
         # TODO
         pass
 
-    def send(self, message):
+    def send(self, address, message):
         for listener in self.on_send:
-            listener(message)
+            listener(address, message)
 
     # TODO consider changing these names. on_foo is more of
     #      an event handler _registration_ convention than an event handler name
@@ -187,37 +187,17 @@ class Broker(object):
             raise DuplicateWorker()
 
         self.workers[worker.address] = worker
-        worker.working = True
+        worker.available = True
 
 
     def remove_worker(self, worker):
         # TODO catch KeyError here
         del self.workers[worker.address]
-        worker.working = False
+        worker.available = False
         # TODO send disconnect?
 
 
-    def on_request(self, sender, message):
-        service_name = message.pop(0)
-
-        try:
-            callback = self._internal_services[service_name]
-            callback(sender, message)
-
-        except KeyError:
-            # The request is for an external service
-            # TODO message?
-            service = self.services[service_name]
-            service.add_request(message)
-
-            self.purge_workers()
-            
-            for worker, request in service.work():
-                self.send_to_worker(worker, request)
-
-
-    def on_register(self, worker_address, message):
-        service_name = message.pop(0)
+    def on_register(self, worker_address, service_name):
 
         if service_name.startswith(self.INTERNAL_SERVICE_PREFIX):
             msg = self.INTERNAL_SERVICE_PREFIX + '.* is reserved for internal sevices'
@@ -259,16 +239,35 @@ class Broker(object):
             pass
 
 
-    def on_reply(self, sender):
-        # Remove & save client return envelope and insert the
-        # protocol header and service name, then rewrap envelope.
-        client = msg.pop(0)
-        empty = msg.pop(0) # ?
+    def on_request(self, client_address, message):
+        service_name, request_body = message
+
+        try:
+            callback = self._internal_services[service_name]
+            callback(client_address, request_body)
+
+        except KeyError:
+            # The request is for an external service
+            # TODO message?
+            service = self.services[service_name]
+            service.add_request(request_body)
+
+           # TODO  self.purge_workers()
+            
+            for request, worker in service.work():
+                self.send(worker.address, request)
+
+
+    def on_reply(self, worker_address, message):
+        client_address, reply_body = message
         # TODO this should include job/request ID so the client knows
         #      what it's getting if it was an async request
-        msg = [client, '', MDP.C_CLIENT] + msg
-        self.socket.send_multipart(msg)
-        self.worker_waiting(worker)
+        self.send(client_address, reply_body)
+        worker = self.workers[worker_address]
+        worker.available = True
+
+        # TODO shouldn't the next job for this service be processed now that
+        #      a worker is available?
 
 
     def on_list(self, sender):
