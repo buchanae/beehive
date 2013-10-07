@@ -257,7 +257,6 @@ class Broker(object):
         except KeyError:
             # The request is for an external service
             service = self.services[service_name]
-            # TODO wtf? this is broken. losing track of the client address
             service.add_request(client_address, request_body)
 
            # TODO  self.purge_workers()

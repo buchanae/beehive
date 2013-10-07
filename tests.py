@@ -132,20 +132,6 @@ def test_broker_add_remove_worker():
     # TODO sends worker disconnect signal?
 
 
-def test_simple_connection():
-    raise SkipTest()
-
-    # TODO redo this to use BrokerChannel
-
-    broker = Broker()
-    broker_channel.bind('inproc://test_register_worker')
-
-    # TODO optimize
-    # TODO better to pass context to broker, or use context created by broker?
-    #      probably better to have the option to pass in a context
-    socket.connect('inproc://test_register_worker')
-
-
 def test_register_unregister_worker():
     broker = Broker()
     worker_address = 'worker1'
@@ -346,7 +332,37 @@ def test_service_request_queue():
 
 
 def test_register_reserved_name():
-    raise SkipTest()
+    broker = Broker()
+    listener = Mock()
+    broker.on_send.add(listener)
+
+    empty_frame = ''
+    worker_address = 'worker1'
+    service_name = 'beehive.test_service'
+
+    # Send a message to the broker telling it to register worker1 for test_service
+    msg = [worker_address, empty_frame, opcodes.REQUEST,
+           'beehive.management.register_worker', service_name]
+
+    with assert_raises(ReservedNameError):
+        broker.on_message(msg)
+
+    # TODO this error should be returned to the worker
+    
 
 def test_unknown_service():
     raise SkipTest()
+
+
+def test_simple_connection():
+    raise SkipTest()
+
+    # TODO redo this to use BrokerChannel
+
+    broker = Broker()
+    broker_channel.bind('inproc://test_register_worker')
+
+    # TODO optimize
+    # TODO better to pass context to broker, or use context created by broker?
+    #      probably better to have the option to pass in a context
+    socket.connect('inproc://test_register_worker')
