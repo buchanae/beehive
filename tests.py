@@ -1,5 +1,3 @@
-import threading
-
 from mock import patch
 from nose.tools import assert_raises, eq_, ok_
 from nose.plugins.skip import SkipTest
@@ -135,6 +133,9 @@ def test_broker_add_remove_worker():
 
 
 def test_simple_connection():
+    raise SkipTest()
+
+    # TODO redo this to use BrokerChannel
 
     broker = Broker()
     broker.bind('inproc://test_register_worker')
@@ -146,32 +147,20 @@ def test_simple_connection():
     socket.connect('inproc://test_register_worker')
 
 
-def broker_tread(endpoint):
-    broker = Broker()
-    broker.bind(endpoint)
-    broker.start()
-
-
 def test_register_worker():
-    endpoint = 'ipc://test_register_worker.ipc'
+    broker = Broker()
 
-    thread = threading.Thread(target=broker_thread, args=(endpoint,))
-    thread.daemon = True
-    thread.start()
+    worker_address = 'worker1'
+    empty_frame = ''
+    msg = [worker_address, empty_frame, opcodes.REQUEST,
+           'beehive.management.register_worker', 'test_service']
 
-    # TODO optimize
-    socket = broker.context.socket(zmq.DEALER)
-    socket.connect('inproc://test_register_worker')
-
-    msg = [opcodes.REQUEST, 'beehive.management.register_worker', 'test_service']
-    socket.send_multipart(msg)
-
+    broker.on_message(msg)
 
     eq_(len(broker.workers), 1)
 
-    # TODO would be nice to have a service that you could query for information
-    #      on idle services/workers
-    eq_(broker.workers, [worker])
+    eq_(broker.services.keys(), ['test_service'])
+    eq_(broker.workers.keys(), ['worker1'])
 
     # TODO test available services?
 

@@ -97,22 +97,39 @@ class opcodes:
     REPLY = 'reply'
 
 
+class ZMQBrokerChannel(object):
+    
+    def __init__(self, broker):
+        self.broker = broker
+
+        self.context = zmq.Context()
+        self.socket = self.context.socket(zmq.ROUTER)
+        self.poller = zmq.Poller()
+        self.poller.register(self.socket, zmq.POLLIN)
+
+    def bind(self, endpoint):
+        self.socket.bind(endpoint)
+
+    def start(self):
+
+        while True:
+            items = self.poller.poll(self.heartbeat_interval)
+
+            print 'foo'
+            if items:
+                message = self.socket.recv_multipart()
+                self.broker.on_message(message)
+
+
+
 class Broker(object):
 
     INTERNAL_SERVICE_PREFIX = 'beehive'
 
     def __init__(self, heartbeat_interval=DEFAULT_HEARTBEAT_INTERVAL):
 
-        # TODO Move connection specifics outside broker?
-        #      Does the broker have to be zmq specific?
-        #      or is there a way to separate that?
-        # TODO this can't use the same context. makes testing difficult
-        # TODO better to pass in context, or use broker's context?
-        self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.ROUTER)
-        self.poller = zmq.Poller()
-        self.poller.register(self.socket, zmq.POLLIN)
-
+        # TODO would be nice to have a service that you could query for information
+        #      on idle services/workers
         self._internal_services = {}
         self.internal_service('management.register_worker', self.on_register)
         self.internal_service('management.unregister_worker', self.on_unregister)
@@ -130,39 +147,30 @@ class Broker(object):
         name = self.INTERNAL_SERVICE_PREFIX + '.' + name
         self._internal_services[name] = callback
 
-    def bind(self, endpoint):
-        self.socket.bind(endpoint)
-
     def destroy(self):
         # TODO
         pass
 
+    # TODO consider changing these names. on_foo is more of
+    #      an event handler _registration_ convention than an event handler name
+    def on_message(self, message):
+        sender = message.pop(0)
+        empty = message.pop(0)
+        assert empty == ''
+        header = message.pop(0)
 
-    def start(self):
+        if header == opcodes.REQUEST:
+            self.on_request(sender, message)
+        elif header == opcodes.REPLY:
+            self.on_reply(sender, message)
+        else:
+            raise InvalidCommand()
 
-        while True:
-            items = self.poller.poll(self.heartbeat_interval)
-
-            print 'foo'
-            if items:
-                message = self.socket.recv_multipart()
-
-                sender = message.pop(0)
-                empty = message.pop(0)
-                assert empty == ''
-                header = message.pop(0)
-
-                if header == opcodes.REQUEST:
-                    self.on_request(sender, message)
-                elif header == opcodes.REPLY:
-                    self.on_reply(sender, message)
-                else:
-                    raise InvalidCommand()
-
-            # TODO necessary?
-            self.purge_workers()
-            self.heartbeat()
-
+        # TODO necessary?
+        # TODO how to do work no a regular interval with this new separation
+        #      of message channel and broker?
+        #self.purge_workers()
+        #self.heartbeat()
 
     def add_worker(self, worker):
         if worker.address in self.workers:
@@ -183,7 +191,7 @@ class Broker(object):
         service_name = message.pop(0)
 
         try:
-            callback = self.internal_services[service_name]
+            callback = self._internal_services[service_name]
             callback(sender, message)
 
         except KeyError:
@@ -198,7 +206,8 @@ class Broker(object):
                 self.send_to_worker(worker, request)
 
 
-    def on_register(self, sender, service_name):
+    def on_register(self, sender, message):
+        service_name = message.pop(0)
 
         if service_name.startswith(self.INTERNAL_SERVICE_PREFIX):
             msg = self.INTERNAL_SERVICE_PREFIX + '.* is reserved for internal sevices'
