@@ -147,7 +147,7 @@ def test_register_unregister_worker():
     msg = [worker_address, empty_frame, opcodes.REQUEST,
            'beehive.management.register_worker', service_name]
 
-    broker.on_message(msg)
+    broker.message(msg)
 
     # Check that the broker is now tracking the worker and the service
     eq_(len(broker.workers), 1)
@@ -168,7 +168,7 @@ def test_register_unregister_worker():
     msg = [worker_address, empty_frame, opcodes.REQUEST,
            'beehive.management.unregister_worker', service_name]
 
-    broker.on_message(msg)
+    broker.message(msg)
     eq_(broker.workers, {})
     # The service stays registered, even though it doesn't have any workers
     eq_(broker.services.keys(), [service_name])
@@ -210,14 +210,14 @@ def test_client_request():
     msg = [worker_address, empty_frame, opcodes.REQUEST,
            'beehive.management.register_worker', service_name]
 
-    broker.on_message(msg)
+    broker.message(msg)
 
     # Make a request of that worker/service from a client
     client_address = 'client1'
     request_body = 'foo'
 
     msg = [client_address, empty_frame, opcodes.REQUEST, service_name, request_body]
-    broker.on_message(msg)
+    broker.message(msg)
 
     # The broker should have sent the request to the worker and changed some state
     # so that the worker is no longer in the service's waiting queue
@@ -232,7 +232,7 @@ def test_client_request():
     # Simulate the worker's reply
     reply_body = 'reply foo'
     msg = [worker_address, empty_frame, opcodes.REPLY, client_address, reply_body]
-    broker.on_message(msg)
+    broker.message(msg)
 
     listener.assert_called_once_with(client_address, reply_body)
 
@@ -255,13 +255,13 @@ def test_worker_reply_processes_next_request():
     service_name = 'test_service'
 
     header = [client_address, empty_frame, opcodes.REQUEST, service_name]
-    broker.on_message(header + [request_1_body])
-    broker.on_message(header + [request_2_body])
+    broker.message(header + [request_1_body])
+    broker.message(header + [request_2_body])
 
     # Add a worker. The first request is immediately sent to the worker.
     msg = [worker_address, empty_frame, opcodes.REQUEST,
            'beehive.management.register_worker', service_name]
-    broker.on_message(msg)
+    broker.message(msg)
 
     listener.assert_called_once_with(worker_address, (client_address, request_1_body))
 
@@ -269,7 +269,7 @@ def test_worker_reply_processes_next_request():
 
     # Simulate the worker's reply.
     msg = [worker_address, empty_frame, opcodes.REPLY, client_address, reply_1_body]
-    broker.on_message(msg)
+    broker.message(msg)
 
     # The reply will be forwarded to the client,
     # and the second request will be sent to the worker.
@@ -290,13 +290,13 @@ def test_worker_registration_processes_queue_request():
 
     header = [client_address, empty_frame, opcodes.REQUEST, service_name]
 
-    broker.on_message(header + [request_body])
+    broker.message(header + [request_body])
 
     # Add a worker. The worker should immediately process the first request.
     msg = [worker_address, empty_frame, opcodes.REQUEST,
            'beehive.management.register_worker', service_name]
 
-    broker.on_message(msg)
+    broker.message(msg)
 
     # Assert that the client's request was sent to the worker
     listener.assert_called_once_with(worker_address, (client_address, request_body))
@@ -320,7 +320,7 @@ def test_service_request_queue():
 
     header = [client_address, empty_frame, opcodes.REQUEST, service_name]
 
-    broker.on_message(header + [request_body])
+    broker.message(header + [request_body])
 
     # When a request is sent for a service that doesn't have any workers,
     # that request is queued.
@@ -344,7 +344,7 @@ def test_register_reserved_name():
            'some_prefix.management.register_worker', service_name]
 
     with assert_raises(ReservedNameError):
-        broker.on_message(msg)
+        broker.message(msg)
 
     # TODO this error should be returned to the worker
     
@@ -401,7 +401,7 @@ def test_simple_connection():
     # Wait for message to be received by broker
     time.sleep(1)
 
-    broker.on_message.assert_called_once_with([client_address, ''] + msg)
+    broker.message.assert_called_once_with([client_address, ''] + msg)
 
     broker.send(client_address, 'foo')
 

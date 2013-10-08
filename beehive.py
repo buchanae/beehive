@@ -132,7 +132,7 @@ class ZMQChannel(object):
 
             if items:
                 message = self.socket.recv_multipart()
-                self.broker.on_message(message)
+                self.broker.message(message)
 
 
 class Broker(object):
@@ -144,10 +144,10 @@ class Broker(object):
         #      on idle services/workers
         self.internal_prefix = internal_prefix
         self._internal_services = {}
-        self.internal_service('management.register_worker', self.on_register)
-        self.internal_service('management.unregister_worker', self.on_unregister)
-        self.internal_service('management.worker_heartbeat', self.on_heartbeat)
-        self.internal_service('management.list_services', self.on_list)
+        self.internal_service('management.register_worker', self.register)
+        self.internal_service('management.unregister_worker', self.unregister)
+        self.internal_service('management.worker_heartbeat', self.heartbeat)
+        self.internal_service('management.list_services', self.list)
 
         # TODO figure out liveness and heartbeating
         self.heartbeat_interval = heartbeat_interval
@@ -156,7 +156,7 @@ class Broker(object):
         def make_service():
             # TODO dependency injection
             service = Service()
-            service.on_work.add(self.on_service_work)
+            service.on_work.add(self.service_work)
             return service
 
         self.services = defaultdict(make_service)
@@ -178,18 +178,16 @@ class Broker(object):
         for listener in self.on_send:
             listener(address, message)
 
-    # TODO consider changing these names. "on_foo" is more of
-    #      an event handler _registration_ convention than an event handler name
-    def on_message(self, message):
+    def message(self, message):
         sender, _, header = message[:3]
         rest = message[3:]
 
         assert _ == ''
 
         if header == opcodes.REQUEST:
-            self.on_request(sender, rest)
+            self.request(sender, rest)
         elif header == opcodes.REPLY:
-            self.on_reply(sender, rest)
+            self.reply(sender, rest)
         else:
             raise InvalidCommand(header)
 
@@ -200,7 +198,7 @@ class Broker(object):
         #self.heartbeat()
 
 
-    def on_service_work(self, request, worker):
+    def service_work(self, request, worker):
         self.send(worker.address, request)
 
 
@@ -219,7 +217,7 @@ class Broker(object):
         # TODO send disconnect?
 
 
-    def on_register(self, worker_address, service_name):
+    def register(self, worker_address, service_name):
 
         # TODO move to add_worker?
         if service_name.startswith(self.internal_prefix):
@@ -254,7 +252,7 @@ class Broker(object):
             raise MultipleRegistrationError(msg)
 
 
-    def on_unregister(self, worker_address, message):
+    def unregister(self, worker_address, message):
         try:
             worker = self.workers[worker_address]
             self.remove_worker(worker)
@@ -262,7 +260,7 @@ class Broker(object):
             pass
 
 
-    def on_request(self, client_address, message):
+    def request(self, client_address, message):
         service_name, request_body = message
 
         try:
@@ -277,7 +275,7 @@ class Broker(object):
            # TODO  self.purge_workers()
 
 
-    def on_reply(self, worker_address, message):
+    def reply(self, worker_address, message):
         client_address, reply_body = message
         # TODO this should include job/request ID so the client knows
         #      what it's getting if it was an async request
@@ -286,18 +284,18 @@ class Broker(object):
         worker.available = True
 
 
-    def on_list(self, sender):
+    def list(self, sender):
         pass
 
 
-    def on_exists(self, sender):
+    def exists(self, sender):
         if service_name in self.broker.services:
             '200'
         else:
             '404'
 
 
-    def on_heartbeat(self, sender):
+    def heartbeat(self, sender):
         # TODO worker's service name will be included in sender identity
         #      broker will provide a nice way to lookup workers via services
         try:
