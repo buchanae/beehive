@@ -5,13 +5,13 @@ import zmq
 
 
 DEFAULT_HEARTBEAT_INTERVAL = 2.5 # seconds
+# TODO I don't like the name liveness
 DEFAULT_LIVENESS = 3
 
 DEFAULT_WORKER_EXPIRATION = 2.5 # seconds
 
 
 class Worker(object):
-    # TODO I don't like the name liveness
 
     def __init__(self, address, service, expiry_interval=DEFAULT_WORKER_EXPIRATION):
 
@@ -101,27 +101,35 @@ class opcodes:
 
 class ZMQChannel(object):
     
-    def __init__(self, context, broker):
+    def __init__(self, broker, context=None, poll_interval=2500):
         self.broker = broker
 
-        # TODO passing in context? does that suck? i can't decide
+        if not context:
+            context = zmq.Context()
         self.context = context
+
+        self.poll_interval = poll_interval
+
         self.socket = self.context.socket(zmq.ROUTER)
         self.poller = zmq.Poller()
         self.poller.register(self.socket, zmq.POLLIN)
 
+        self.broker.on_send.add(self.send)
+
     def bind(self, endpoint):
         self.socket.bind(endpoint)
+
+    def send(self, address, message):
+        self.socket.send_multipart([address, '', message])
 
     def start(self):
 
         while True:
-            items = self.poller.poll(2500)
+            items = self.poller.poll(self.poll_interval)
 
             if items:
                 message = self.socket.recv_multipart()
                 self.broker.on_message(message)
-
 
 
 class Broker(object):
@@ -161,20 +169,20 @@ class Broker(object):
         for listener in self.on_send:
             listener(address, message)
 
-    # TODO consider changing these names. on_foo is more of
+    # TODO consider changing these names. "on_foo" is more of
     #      an event handler _registration_ convention than an event handler name
     def on_message(self, message):
-        sender = message.pop(0)
-        empty = message.pop(0)
-        assert empty == ''
-        header = message.pop(0)
+        sender, _, header = message[:3]
+        rest = message[3:]
+
+        assert _ == ''
 
         if header == opcodes.REQUEST:
-            self.on_request(sender, message)
+            self.on_request(sender, rest)
         elif header == opcodes.REPLY:
-            self.on_reply(sender, message)
+            self.on_reply(sender, rest)
         else:
-            raise InvalidCommand()
+            raise InvalidCommand(header)
 
         # TODO necessary?
         # TODO how to do work on a regular interval with this new separation

@@ -9,6 +9,9 @@ import zmq
 from beehive import *
 
 
+empty_frame = ''
+
+
 def test_worker_equality():
     # Workers implement __eq__ which compares by (worker.address, worker.service)
     s1 = Service()
@@ -138,7 +141,6 @@ def test_broker_add_remove_worker():
 def test_register_unregister_worker():
     broker = Broker()
     worker_address = 'worker1'
-    empty_frame = ''
     service_name = 'test_service'
 
     # Send a message to the broker telling it to register worker1 for test_service
@@ -202,7 +204,6 @@ def test_client_request():
 
     # Register a worker
     worker_address = 'worker1'
-    empty_frame = ''
     service_name = 'test_service'
 
     # Send a message to the broker telling it to register worker1 for test_service
@@ -213,7 +214,6 @@ def test_client_request():
 
     # Make a request of that worker/service from a client
     client_address = 'client1'
-    empty_frame = ''
     request_body = 'foo'
 
     msg = [client_address, empty_frame, opcodes.REQUEST, service_name, request_body]
@@ -247,7 +247,6 @@ def test_worker_reply_processes_next_request():
     broker.on_send.add(listener)
 
     # Queue up two requests
-    empty_frame = ''
     client_address = 'client1'
     worker_address = 'worker1'
     request_1_body = 'request 1'
@@ -284,7 +283,6 @@ def test_worker_registration_processes_queue_request():
     broker.on_send.add(listener)
 
     # Queue a request
-    empty_frame = ''
     client_address = 'client1'
     worker_address = 'worker1'
     request_body = 'request 1'
@@ -316,7 +314,6 @@ def test_service_request_queue():
     broker.on_send.add(listener)
 
     # Queue a request
-    empty_frame = ''
     client_address = 'client1'
     request_body = 'request 1'
     service_name = 'test_service'
@@ -339,7 +336,6 @@ def test_register_reserved_name():
     listener = Mock()
     broker.on_send.add(listener)
 
-    empty_frame = ''
     worker_address = 'worker1'
     service_name = 'beehive.test_service'
 
@@ -353,15 +349,27 @@ def test_register_reserved_name():
     # TODO this error should be returned to the worker
     
 
+def test_channel_send_from_broker():
+    broker = Mock(wraps=Broker())
+    context = Mock()
+
+    channel = ZMQChannel(broker, context)
+
+    broker.send('address', 'message')
+
+    channel.socket.send_multipart.assert_called_once_with(['address', '', 'message'])
+
+
 def test_simple_connection():
+
     #endpoint = 'ipc://bar_simple_connection.ipc'
     endpoint = 'inproc://test_simple_connection'
 
     context = zmq.Context()
-    broker = Mock()
+    broker = Mock(wraps=Broker())
 
     def make_broker():
-        channel = ZMQChannel(context, broker)
+        channel = ZMQChannel(broker, context)
         channel.bind(endpoint)
         channel.start()
 
@@ -378,20 +386,31 @@ def test_simple_connection():
     time.sleep(0.01)
 
     client = context.socket(zmq.REQ)
-    client_id = 'client socket'
-    client.set(zmq.IDENTITY, client_id)
+    client_address = 'client socket'
+    client.set(zmq.IDENTITY, client_address)
     client.connect(endpoint)
 
     # Send a request to the broker via the socket
     service_name = 'test_service'
-    request_body = 'request one'
-    msg = [opcodes.REQUEST, service_name, request_body]
+    msg = [opcodes.REQUEST, service_name, 'request body']
     client.send_multipart(msg)
+
+    # TODO sucks to sleep for a whole second. need to be able to adjust things
+    #      to make this interval shorter for testing/simulation purposes
 
     # Wait for message to be received by broker
     time.sleep(1)
 
-    broker.on_message.assert_called_once_with([client_id, ''] + msg)
+    broker.on_message.assert_called_once_with([client_address, ''] + msg)
+
+    broker.send(client_address, 'foo')
+
+    time.sleep(1)
+
+    resp = client.recv_multipart(zmq.NOBLOCK)
+    eq_(resp, ['foo'])
+
+    # TODO clean up the broker/channel thread
 
 
 # TODO still lots of heartbeat stuff to work out
