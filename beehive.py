@@ -89,8 +89,6 @@ class Service(object):
         return list(self.worker_queue)
 
 
-
-
 class Error(Exception): pass
 class ErrorTODO(Error): pass
 class ReservedNameError(Error): pass
@@ -139,12 +137,12 @@ class ZMQChannel(object):
 
 class Broker(object):
 
-    INTERNAL_SERVICE_PREFIX = 'beehive'
-
-    def __init__(self, heartbeat_interval=DEFAULT_HEARTBEAT_INTERVAL):
+    def __init__(self, heartbeat_interval=DEFAULT_HEARTBEAT_INTERVAL,
+                 internal_prefix='beehive'):
 
         # TODO would be nice to have a service that you could query for information
         #      on idle services/workers
+        self.internal_prefix = internal_prefix
         self._internal_services = {}
         self.internal_service('management.register_worker', self.on_register)
         self.internal_service('management.unregister_worker', self.on_unregister)
@@ -169,7 +167,7 @@ class Broker(object):
         self.on_send = set()
 
     def internal_service(self, name, callback):
-        name = self.INTERNAL_SERVICE_PREFIX + '.' + name
+        name = self.internal_prefix + '.' + name
         self._internal_services[name] = callback
 
     def destroy(self):
@@ -213,6 +211,7 @@ class Broker(object):
         self.workers[worker.address] = worker
         worker.available = True
 
+
     def remove_worker(self, worker):
         # TODO catch KeyError here
         del self.workers[worker.address]
@@ -223,8 +222,8 @@ class Broker(object):
     def on_register(self, worker_address, service_name):
 
         # TODO move to add_worker?
-        if service_name.startswith(self.INTERNAL_SERVICE_PREFIX):
-            msg = self.INTERNAL_SERVICE_PREFIX + '.* is reserved for internal sevices'
+        if service_name.startswith(self.internal_prefix):
+            msg = self.internal_prefix + '.* is reserved for internal sevices'
             raise ReservedNameError(msg)
 
         service = self.services[service_name]

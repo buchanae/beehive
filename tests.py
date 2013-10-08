@@ -332,16 +332,16 @@ def test_service_request_queue():
 
 
 def test_register_reserved_name():
-    broker = Broker()
+    broker = Broker(internal_prefix='some_prefix')
     listener = Mock()
     broker.on_send.add(listener)
 
     worker_address = 'worker1'
-    service_name = 'beehive.test_service'
+    service_name = 'some_prefix.test_service'
 
     # Send a message to the broker telling it to register worker1 for test_service
     msg = [worker_address, empty_frame, opcodes.REQUEST,
-           'beehive.management.register_worker', service_name]
+           'some_prefix.management.register_worker', service_name]
 
     with assert_raises(ReservedNameError):
         broker.on_message(msg)
