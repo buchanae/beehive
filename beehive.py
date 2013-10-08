@@ -114,16 +114,13 @@ class ZMQChannel(object):
         self.socket.bind(endpoint)
 
     def start(self):
-        self.start_foo()
-
-    def start_foo(self):
 
         while True:
             items = self.poller.poll(2500)
 
-            #if items:
-                #message = self.socket.recv_multipart()
-                #self.broker.on_message(message)
+            if items:
+                message = self.socket.recv_multipart()
+                self.broker.on_message(message)
 
 
 

@@ -354,7 +354,8 @@ def test_register_reserved_name():
     
 
 def test_simple_connection():
-    endpoint = 'ipc://bar_simple_connection.ipc'
+    #endpoint = 'ipc://bar_simple_connection.ipc'
+    endpoint = 'inproc://test_simple_connection'
 
     context = zmq.Context()
     broker = Mock()
@@ -369,17 +370,28 @@ def test_simple_connection():
     t.start()
 
     # TODO this is required to avoid errors like:
-    #      """
     #      Invalid argument (bundled/zeromq/src/stream_engine.cpp:95)
-    #      Abort trap
-    #      """
+    #      and connection refused.
     #      I don't know why. Something about closing a socket
     #      that hasn't fully connected? Or maybe the channel's socket hasn't fully bound?
     #      Seems like Poller is part of this somehow.
     time.sleep(0.01)
 
-    b = context.socket(zmq.REQ)
-    b.connect(endpoint)
+    client = context.socket(zmq.REQ)
+    client_id = 'client socket'
+    client.set(zmq.IDENTITY, client_id)
+    client.connect(endpoint)
+
+    # Send a request to the broker via the socket
+    service_name = 'test_service'
+    request_body = 'request one'
+    msg = [opcodes.REQUEST, service_name, request_body]
+    client.send_multipart(msg)
+
+    # Wait for message to be received by broker
+    time.sleep(1)
+
+    broker.on_message.assert_called_once_with([client_id, ''] + msg)
 
 
 # TODO still lots of heartbeat stuff to work out
