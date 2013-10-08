@@ -58,21 +58,26 @@ class Service(object):
     def __init__(self):
         self.request_queue = deque()
         self.worker_queue = deque()
+        self.on_work = set()
 
     def add_worker(self, worker):
         self.worker_queue.append(worker)
+        self.trigger_work()
 
     def remove_worker(self, worker):
         self.worker_queue.remove(worker)
 
     def add_request(self, reply_address, request):
         self.request_queue.append((reply_address, request))
+        self.trigger_work()
 
-    def work(self):
+    def trigger_work(self):
         while self.request_queue and self.worker_queue:
             request = self.request_queue.popleft()
             worker = self.worker_queue.popleft()
-            yield request, worker
+
+            for callback in self.on_work:
+                callback(request, worker)
 
     @property
     def requests(self):
@@ -150,7 +155,13 @@ class Broker(object):
         self.heartbeat_interval = heartbeat_interval
         self.last_heartbeat = 0
 
-        self.services = defaultdict(Service)
+        def make_service():
+            # TODO dependency injection
+            service = Service()
+            service.on_work.add(self.on_service_work)
+            return service
+
+        self.services = defaultdict(make_service)
         self.workers = {}
 
         # TODO need to think about renaming a lot of this stuff
@@ -191,18 +202,16 @@ class Broker(object):
         #self.heartbeat()
 
 
+    def on_service_work(self, request, worker):
+        self.send(worker.address, request)
+
+
     def add_worker(self, worker):
         if worker.address in self.workers:
             raise DuplicateWorker()
 
         self.workers[worker.address] = worker
         worker.available = True
-
-        # TODO this is duplicated with on_request. need some organization here.
-        # TODO consider moving this to Service.on_work that Broker subscribes to
-        for request, worker in worker.service.work():
-            self.send(worker.address, request)
-
 
     def remove_worker(self, worker):
         # TODO catch KeyError here
@@ -267,9 +276,6 @@ class Broker(object):
             service.add_request(client_address, request_body)
 
            # TODO  self.purge_workers()
-            
-            for request, worker in service.work():
-                self.send(worker.address, request)
 
 
     def on_reply(self, worker_address, message):
@@ -279,10 +285,6 @@ class Broker(object):
         self.send(client_address, reply_body)
         worker = self.workers[worker_address]
         worker.available = True
-
-        # TODO this is duplicated with on_request. need some organization here.
-        for request, worker in worker.service.work():
-            self.send(worker.address, request)
 
 
     def on_list(self, sender):

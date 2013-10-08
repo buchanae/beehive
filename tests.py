@@ -84,25 +84,25 @@ def test_worker_expiry(mock_time):
 
 def test_service():
     s = Service()
+    listener = Mock()
+
+    s.on_work.add(listener)
 
     # The service starts out with no work to do.
-    eq_(list(s.work()), [])
+    eq_(listener.mock_calls, [])
 
     # Add a worker
     s.add_worker('worker1')
     eq_(s.waiting, ['worker1'])
 
     # Still no work to be done
-    eq_(list(s.work()), [])
+    eq_(listener.mock_calls, [])
 
     # Add a request
     s.add_request('reply_address', 'request1')
 
     # Now there's work to be done
-    eq_(list(s.work()), [(('reply_address', 'request1'), 'worker1')])
-
-    # Getting the work removes it, so now there's no work
-    eq_(list(s.work()), [])
+    listener.assert_called_once_with(('reply_address', 'request1'), 'worker1')
 
 
 def test_broker_add_remove_worker():
@@ -407,8 +407,8 @@ def test_simple_connection():
 
     time.sleep(1)
 
-    resp = client.recv_multipart(zmq.NOBLOCK)
-    eq_(resp, ['foo'])
+    resp = client.recv(zmq.NOBLOCK)
+    eq_(resp, 'foo')
 
     # TODO clean up the broker/channel thread
 
