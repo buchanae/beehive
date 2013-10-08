@@ -99,13 +99,13 @@ class opcodes:
     REPLY = 'reply'
 
 
-class ZMQBrokerChannel(object):
-    # TODO how does this handle response communication from the broker?
+class ZMQChannel(object):
     
-    def __init__(self, broker):
+    def __init__(self, context, broker):
         self.broker = broker
 
-        self.context = zmq.Context()
+        # TODO passing in context? does that suck? i can't decide
+        self.context = context
         self.socket = self.context.socket(zmq.ROUTER)
         self.poller = zmq.Poller()
         self.poller.register(self.socket, zmq.POLLIN)
@@ -114,14 +114,16 @@ class ZMQBrokerChannel(object):
         self.socket.bind(endpoint)
 
     def start(self):
+        self.start_foo()
+
+    def start_foo(self):
 
         while True:
-            items = self.poller.poll(self.heartbeat_interval)
+            items = self.poller.poll(2500)
 
-            print 'foo'
-            if items:
-                message = self.socket.recv_multipart()
-                self.broker.on_message(message)
+            #if items:
+                #message = self.socket.recv_multipart()
+                #self.broker.on_message(message)
 
 
 
@@ -282,6 +284,13 @@ class Broker(object):
         pass
 
 
+    def on_exists(self, sender):
+        if service_name in self.broker.services:
+            '200'
+        else:
+            '404'
+
+
     def on_heartbeat(self, sender):
         # TODO worker's service name will be included in sender identity
         #      broker will provide a nice way to lookup workers via services
@@ -292,13 +301,6 @@ class Broker(object):
             raise ErrorTODO
         else:
             worker.extend_expiry()
-
-
-    def on_exists(self, sender):
-        if service_name in self.broker.services:
-            '200'
-        else:
-            '404'
 
 
     def purge_workers(self):

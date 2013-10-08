@@ -1,3 +1,6 @@
+import threading
+import time
+
 from mock import call, Mock, patch
 from nose.tools import assert_raises, eq_, ok_
 from nose.plugins.skip import SkipTest
@@ -350,19 +353,33 @@ def test_register_reserved_name():
     # TODO this error should be returned to the worker
     
 
-def test_unknown_service():
-    raise SkipTest()
-
-
 def test_simple_connection():
-    raise SkipTest()
+    endpoint = 'ipc://bar_simple_connection.ipc'
 
-    # TODO redo this to use BrokerChannel
+    context = zmq.Context()
+    broker = Mock()
 
-    broker = Broker()
-    broker_channel.bind('inproc://test_register_worker')
+    def make_broker():
+        channel = ZMQChannel(context, broker)
+        channel.bind(endpoint)
+        channel.start()
 
-    # TODO optimize
-    # TODO better to pass context to broker, or use context created by broker?
-    #      probably better to have the option to pass in a context
-    socket.connect('inproc://test_register_worker')
+    t = threading.Thread(target=make_broker)
+    t.daemon = True
+    t.start()
+
+    # TODO this is required to avoid errors like:
+    #      """
+    #      Invalid argument (bundled/zeromq/src/stream_engine.cpp:95)
+    #      Abort trap
+    #      """
+    #      I don't know why. Something about closing a socket
+    #      that hasn't fully connected? Or maybe the channel's socket hasn't fully bound?
+    #      Seems like Poller is part of this somehow.
+    time.sleep(0.01)
+
+    b = context.socket(zmq.REQ)
+    b.connect(endpoint)
+
+
+# TODO still lots of heartbeat stuff to work out
