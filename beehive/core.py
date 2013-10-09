@@ -74,29 +74,29 @@ class Worker(object):
         """
         self.address = address
         self.service = service
-        self._available = False
+        self._idle = False
 
     # TODO rename to idle
     @property
-    def available(self):
+    def idle(self):
         """Returns True if this worker is currently idle.
 
         When set, this worker will be added to/removed from the service's
         idle workers accordingly.
         """
-        return self._available
+        return self._idle
 
-    @available.setter
-    def available(self, value):
+    @idle.setter
+    def idle(self, value):
         # TODO there _must_ be bugs here. You can add this worker to the queue twice.
         #      try,
-        #      if value and not self._available:
+        #      if value and not self._idle:
         #      and vice versa
         if value:
-            self._available = True
+            self._idle = True
             self.service.add_worker(self)
         else:
-            self._available = False
+            self._idle = False
             self.service.remove_worker(self)
 
 
@@ -250,7 +250,7 @@ class Broker(object):
             raise DuplicateWorker()
 
         self.workers[worker.address] = worker
-        worker.available = True
+        worker.idle = True
 
 
     def remove_worker(self, worker):
@@ -258,7 +258,7 @@ class Broker(object):
 
         try:
             del self.workers[worker.address]
-            worker.available = False
+            worker.idle = False
 
         except KeyError:
             raise UnknownWorker(worker.address)
@@ -327,7 +327,7 @@ class Broker(object):
         log.info('Replying to {} with {}'.format(client_address, reply_body))
         self.send(client_address, reply_body)
         worker = self.workers[worker_address]
-        worker.available = True
+        worker.idle = True
 
 
     def list(self, sender):

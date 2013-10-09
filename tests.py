@@ -10,27 +10,27 @@ from beehive_worker import *
 empty_frame = ''
 
 
-def test_worker_available():
+def test_worker_idle():
     service = Broker.Service()
     worker = Broker.Worker('address', service)
 
-    eq_(worker.available, False)
+    eq_(worker.idle, False)
     eq_(service.idle_workers, [])
 
-    # When worker.available is set to True,
+    # When worker.idle is set to True,
     # the worker adds itself to its service's queue
-    worker.available = True
+    worker.idle = True
     eq_(service.idle_workers, [worker])
 
-    # This looks like a funny thing to test, but since Worker.available is a property
+    # This looks like a funny thing to test, but since Worker.idle is a property
     # I want to make sure it returns the proper value.
-    eq_(worker.available, True)
+    eq_(worker.idle, True)
 
-    # When worker.available is set to False,
+    # When worker.idle is set to False,
     # the worker removes itself from its service's queue
-    worker.available = False
+    worker.idle = False
     eq_(service.idle_workers, [])
-    eq_(worker.available, False)
+    eq_(worker.idle, False)
 
 
 def test_service():
@@ -118,7 +118,7 @@ def test_register_unregister_worker():
     # Check that the worker is in the service's queue
     eq_(service.idle_workers, [worker])
     eq_(worker.service, service)
-    eq_(worker.available, True)
+    eq_(worker.idle, True)
 
     # Now send a message to the broker telling it to unregister the worker
     msg = [worker_address, empty_frame, opcodes.REQUEST,
@@ -163,7 +163,7 @@ def test_register_duplicate_worker():
     # Check that the worker is in the service's queue
     eq_(service.idle_workers, [worker])
     eq_(worker.service, service)
-    eq_(worker.available, True)
+    eq_(worker.idle, True)
 
 
 def test_broker_stream_send():
