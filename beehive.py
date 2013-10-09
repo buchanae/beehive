@@ -31,17 +31,6 @@ class Worker(object):
             self._available = False
             self.service.remove_worker(self)
 
-    # TODO so far, these aren't actually needed
-    @property
-    def _key(self):
-        return self.address, self.service
-
-    def __eq__(self, other):
-        return isinstance(other, Worker) and self._key == other._key
-
-    def __hash__(self):
-        return hash(self._key)
-
 
 class Service(object):
     def __init__(self):

@@ -12,23 +12,6 @@ from beehive import *
 empty_frame = ''
 
 
-def test_worker_equality():
-    # Workers implement __eq__ which compares by (worker.address, worker.service)
-    s1 = Service()
-    s2 = Service()
-
-    a = Worker('worker1', s1)
-    b = Worker('worker1', s1)
-    c = Worker('worker1', s2)
-    d = Worker('worker2', s1)
-
-    eq_(a, b)
-    assert a != c
-    assert a != d
-    assert b != c
-    assert c != d
-
-
 def test_worker_available():
     service = Service()
     worker = Worker('address', service)
