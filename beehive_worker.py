@@ -1,11 +1,19 @@
-import beehive
+import logging
 
 import msgpack
 import zmq
 
+import beehive
+
+
+log = logging.getLogger('client')
+
 
 class BeehiveClient(object):
-    def __init__(self, context, endpoint, client_ID=None):
+    def __init__(self, endpoint, client_ID=None, context=None):
+        if not context:
+            context = zmq.Context()
+        self.context = context
         self.socket = context.socket(zmq.DEALER)
 
         if client_ID:
@@ -19,18 +27,20 @@ class BeehiveClient(object):
         self.socket.send_multipart(msg)
 
     def reply(self, destination, reply_body):
+        log.info('Replying')
         msg = ['', beehive.opcodes.REPLY, destination, reply_body]
         self.socket.send_multipart(msg)
 
     def recv(self):
-        r = self.socket.recv_multipart()[1]
-        return msgpack.unpackb(r)
+        message = self.socket.recv_multipart()[1]
+        unpacked = msgpack.unpackb(message)
+        return unpacked
 
 
 class BeehiveWorker(BeehiveClient):
 
-    def __init__(self, context, endpoint, service_name, worker_ID=None):
-        super(BeehiveWorker, self).__init__(context, endpoint, client_ID=worker_ID)
+    def __init__(self, endpoint, service_name, worker_ID=None, context=None):
+        super(BeehiveWorker, self).__init__(endpoint, worker_ID, context)
 
         self.service_name = service_name
 
@@ -44,7 +54,6 @@ class BeehiveWorker(BeehiveClient):
     def unregister(self):
         self.request('beehive.management.unregister_worker', '')
 
-    def work(self, request): pass
-
     def get_work(self):
+        log.info('Getting work')
         return self.recv()

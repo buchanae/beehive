@@ -2,46 +2,52 @@ import logging
 import threading
 import time
 
-import zmq
-from zmq.eventloop.ioloop import IOLoop
-from zmq.eventloop.zmqstream import ZMQStream
-
-from beehive import Broker
+from beehive import Broker, ZMQChannel
 from beehive_worker import BeehiveClient, BeehiveWorker
 
 
 if __name__ == '__main__':
+
     logging.basicConfig(level=logging.INFO)
 
-    context = zmq.Context()
-    stream = ZMQStream(socket)
+    endpoint = 'tcp://127.0.0.1:5555'
 
-    broker = Broker(stream)
-
-    time.sleep(0.1)
+    def make_broker():
+        channel = ZMQChannel()
+        channel.bind(endpoint)
+        broker = Broker(channel)
+        channel.start()
 
     def make_worker(n):
         name = 'worker {}'.format(n)
-        worker = BeehiveWorker(context, 'tcp://localhost:5555', 'test_service', name)
+        worker = BeehiveWorker(endpoint, 'test_service', name)
         worker.register()
+
         r = worker.get_work()
         print 'worker.get_work unpacked', r
         client_address, request_body = r
         worker.reply(client_address, 'reply ' + request_body)
 
-    t = threading.Thread(target=make_worker, args=(1,))
-    t.daemon = True
-    t.start()
-
     def make_client(n):
         name = 'client {}'.format(n)
-        client = BeehiveClient(context, 'tcp://localhost:5555', name)
+        client = BeehiveClient(endpoint, name)
         client.request('test_service', 'foobar')
         r = client.recv()
         print 'client recv', r
+
+
+    a = threading.Thread(target=make_broker)
+    a.daemon = True
+    a.start()
+
+    time.sleep(0.1)
+
+    b = threading.Thread(target=make_worker, args=(1,))
+    b.daemon = True
+    b.start()
 
     c = threading.Thread(target=make_client, args=(1,))
     c.daemon = True
     c.start()
 
-    channel.start()
+    time.sleep(1)

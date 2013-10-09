@@ -102,9 +102,12 @@ class ZMQChannel(object):
     def on_recv(self, *args, **kwargs):
         self.stream.on_recv(*args, **kwargs)
 
-    # TODO this isn't a very nice/consistent API
+    def pack(self, message):
+        return msgpack.packb(message)
+
     def send(self, address, message):
-        self.stream.send_multipart([address, '', message])
+        packed = self.pack(message)
+        self.stream.send_multipart([address, '', packed])
 
 
 # TODO is there a way to do this via string.format?
