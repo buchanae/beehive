@@ -11,8 +11,8 @@ empty_frame = ''
 
 
 def test_worker_available():
-    service = Service()
-    worker = Worker('address', service)
+    service = Broker.Service()
+    worker = Broker.Worker('address', service)
 
     eq_(worker.available, False)
     eq_(service.waiting, [])
@@ -34,7 +34,7 @@ def test_worker_available():
 
 
 def test_service():
-    s = Service()
+    s = Broker.Service()
     listener = Mock()
 
     s.on_work.add(listener)
@@ -59,7 +59,7 @@ def test_service():
 def test_broker_add_remove_worker():
     stream = Mock()
     broker = Broker(stream)
-    s1 = Service()
+    s1 = Broker.Service()
 
     # Broker tracks workers with a dictionary.
     # Initially it's empty
@@ -69,7 +69,7 @@ def test_broker_add_remove_worker():
     eq_(s1.waiting, [])
 
     # Add a worker
-    w = Worker('worker1', s1)
+    w = Broker.Worker('worker1', s1)
     broker.add_worker(w)
 
     # Broker tracks the worker

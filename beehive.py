@@ -13,61 +13,6 @@ from zmq.eventloop.zmqstream import ZMQStream
 log = logging.getLogger('beehive')
 
 
-class Worker(object):
-
-    def __init__(self, address, service):
-
-        self.address = address
-        self.service = service
-        self._available = False
-
-    @property
-    def available(self):
-        return self._available
-
-    @available.setter
-    def available(self, value):
-        if value:
-            self._available = True
-            self.service.add_worker(self)
-        else:
-            self._available = False
-            self.service.remove_worker(self)
-
-
-class Service(object):
-    def __init__(self):
-        self.request_queue = deque()
-        self.worker_queue = deque()
-        self.on_work = set()
-
-    def add_worker(self, worker):
-        self.worker_queue.append(worker)
-        self.trigger_work()
-
-    def remove_worker(self, worker):
-        self.worker_queue.remove(worker)
-
-    def add_request(self, reply_address, request):
-        self.request_queue.append((reply_address, request))
-        self.trigger_work()
-
-    def trigger_work(self):
-        while self.request_queue and self.worker_queue:
-            request = self.request_queue.popleft()
-            worker = self.worker_queue.popleft()
-
-            for callback in self.on_work:
-                callback(request, worker)
-
-    @property
-    def requests(self):
-        return list(self.request_queue)
-
-    # TODO change name to idle
-    @property
-    def waiting(self):
-        return list(self.worker_queue)
 
 
 class Error(Exception): pass
@@ -121,6 +66,62 @@ def address_str(address):
     
 class Broker(object):
 
+    class Worker(object):
+
+        def __init__(self, address, service):
+
+            self.address = address
+            self.service = service
+            self._available = False
+
+        @property
+        def available(self):
+            return self._available
+
+        @available.setter
+        def available(self, value):
+            if value:
+                self._available = True
+                self.service.add_worker(self)
+            else:
+                self._available = False
+                self.service.remove_worker(self)
+
+
+    class Service(object):
+        def __init__(self):
+            self.request_queue = deque()
+            self.worker_queue = deque()
+            self.on_work = set()
+
+        def add_worker(self, worker):
+            self.worker_queue.append(worker)
+            self.trigger_work()
+
+        def remove_worker(self, worker):
+            self.worker_queue.remove(worker)
+
+        def add_request(self, reply_address, request):
+            self.request_queue.append((reply_address, request))
+            self.trigger_work()
+
+        def trigger_work(self):
+            while self.request_queue and self.worker_queue:
+                request = self.request_queue.popleft()
+                worker = self.worker_queue.popleft()
+
+                for callback in self.on_work:
+                    callback(request, worker)
+
+        @property
+        def requests(self):
+            return list(self.request_queue)
+
+        # TODO change name to idle
+        @property
+        def waiting(self):
+            return list(self.worker_queue)
+
     def __init__(self, stream, internal_prefix='beehive'):
         self.stream = stream
         self.stream.on_recv(self.message)
@@ -134,8 +135,7 @@ class Broker(object):
         self.internal_service('management.list_services', self.list)
 
         def make_service():
-            # TODO dependency injection
-            service = Service()
+            service = self.Service()
             service.on_work.add(self.service_work)
             return service
 
@@ -204,9 +204,7 @@ class Broker(object):
 
         service = self.services[service_name]
 
-        # TODO what happens when you register two workers with the same identity
-        #      what does zmq do about duplicate identities connecting to a router?
-        worker = Worker(worker_address, service)
+        worker = self.Worker(worker_address, service)
 
         try:
             self.add_worker(worker)
