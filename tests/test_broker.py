@@ -1,10 +1,8 @@
 from mock import call, Mock, patch
 from nose.tools import assert_raises, eq_, ok_
 from nose.plugins.skip import SkipTest
-import zmq
 
 from beehive.core import *
-from beehive_worker import *
 
 
 empty_frame = ''
@@ -319,13 +317,6 @@ def test_register_reserved_name():
         broker.message(msg)
 
     # TODO this error should be returned to the worker
-
-def test_client_identity():
-    client = BeehiveClient()
-    eq_(client.identity, '')
-
-    client.identity = 'foo'
-    eq_(client.identity, 'foo')
 
 
 def test_register_empty_service_name():

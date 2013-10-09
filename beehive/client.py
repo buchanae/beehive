@@ -30,12 +30,12 @@ class BeehiveClient(object):
 
     def request(self, service_name, request_body):
         # TODO add job ID and futures
-        msg = ['', beehive.opcodes.REQUEST, service_name, request_body]
+        msg = ['', beehive.core.opcodes.REQUEST, service_name, request_body]
         self.socket.send_multipart(msg)
 
     def reply(self, destination, reply_body):
         log.info('Replying')
-        msg = ['', beehive.opcodes.REPLY, destination, reply_body]
+        msg = ['', beehive.core.opcodes.REPLY, destination, reply_body]
         self.socket.send_multipart(msg)
 
     def unpack(self, message):

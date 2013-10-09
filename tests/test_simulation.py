@@ -4,8 +4,8 @@ import time
 
 from tl.testing import thread
 
-from beehive import Broker, ZMQChannel
-from beehive_worker import BeehiveClient, BeehiveWorker
+from beehive.core import Broker, ZMQChannel
+from beehive.client import BeehiveClient, BeehiveWorker
 
 
 logging.basicConfig(level=logging.INFO)
