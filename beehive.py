@@ -1,6 +1,9 @@
+import binascii
 from collections import defaultdict, deque
+import logging
 import time
 
+import msgpack
 import zmq
 
 
@@ -9,6 +12,8 @@ DEFAULT_HEARTBEAT_INTERVAL = 2.5 # seconds
 DEFAULT_LIVENESS = 3
 
 DEFAULT_WORKER_EXPIRATION = 2.5 # seconds
+
+log = logging.getLogger('beehive')
 
 
 class Worker(object):
@@ -93,7 +98,8 @@ class Error(Exception): pass
 class ErrorTODO(Error): pass
 class ReservedNameError(Error): pass
 class DuplicateWorker(Error): pass
-class MultipleReadyCommandsError(Error): pass
+class MultipleRegistrationError(Error): pass
+# TODO errors should be caught and return to client, if appropriate
 
 
 class opcodes:
@@ -104,6 +110,7 @@ class opcodes:
 
 class ZMQChannel(object):
     
+    # TODO should I pass channel to Broker instead?
     def __init__(self, broker, context=None, poll_interval=2500):
         self.broker = broker
 
@@ -122,8 +129,11 @@ class ZMQChannel(object):
     def bind(self, endpoint):
         self.socket.bind(endpoint)
 
+    # TODO this isn't a very nice/consistent API
     def send(self, address, message):
-        self.socket.send_multipart([address, '', message])
+        # TODO message serialization
+        serialized = msgpack.packb(message)
+        self.socket.send_multipart([address, '', serialized])
 
     def start(self):
 
@@ -135,6 +145,14 @@ class ZMQChannel(object):
                 self.broker.message(message)
 
 
+# TODO is there a way to do this via string.format?
+def address_str(address):
+    try:
+        return address.encode('ascii')
+    except UnicodeDecodeError:
+        return binascii.hexlify(address)
+
+    
 class Broker(object):
 
     def __init__(self, heartbeat_interval=DEFAULT_HEARTBEAT_INTERVAL,
@@ -199,6 +217,7 @@ class Broker(object):
 
 
     def service_work(self, request, worker):
+        log.info('Servicing request {}'.format(request))
         self.send(worker.address, request)
 
 
@@ -224,6 +243,7 @@ class Broker(object):
             msg = self.internal_prefix + '.* is reserved for internal sevices'
             raise ReservedNameError(msg)
 
+        # TODO validate message. an empty service name would pass
         service = self.services[service_name]
 
         # TODO worker should tell broker its expiration time
@@ -235,6 +255,11 @@ class Broker(object):
 
         try:
             self.add_worker(worker)
+
+            log_msg = 'Registered worker {} for service {}'
+            log_msg = log_msg.format(address_str(worker.address), service_name)
+            log.info(log_msg)
+
         except DuplicateWorker:
             # TODO can't I just ignore this?
             #      I guess it's possible that the worker could send ready, then
@@ -256,7 +281,13 @@ class Broker(object):
         try:
             worker = self.workers[worker_address]
             self.remove_worker(worker)
+
+            log_msg = 'Unregistered worker {}'
+            log_msg = log_msg.format(address_str(worker.address))
+            log.info(log_msg)
+
         except KeyError:
+            # TODO should return an appropriate error?
             pass
 
 
@@ -265,11 +296,13 @@ class Broker(object):
 
         try:
             callback = self._internal_services[service_name]
+            log.info('Processing internal service request')
             callback(client_address, request_body)
 
         except KeyError:
             # The request is for an external service
             service = self.services[service_name]
+            log.info('Queueing request for {}'.format(service_name))
             service.add_request(client_address, request_body)
 
            # TODO  self.purge_workers()
@@ -279,6 +312,7 @@ class Broker(object):
         client_address, reply_body = message
         # TODO this should include job/request ID so the client knows
         #      what it's getting if it was an async request
+        log.info('Replying to {} with {}'.format(client_address, reply_body))
         self.send(client_address, reply_body)
         worker = self.workers[worker_address]
         worker.available = True
@@ -326,3 +360,9 @@ class Broker(object):
                     self.send_to_worker(worker, heartbeat, None, None)
 
             self.last_heartbeat = time.time()
+
+
+# TODO still lots of heartbeat stuff to work out
+#      just remove heartbeat stuff, do a release, and develop heartbeat on a branch
+
+# TODO possibly a service for starting workers?
