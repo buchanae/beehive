@@ -1,6 +1,3 @@
-import threading
-import time
-
 from mock import call, Mock, patch
 from nose.tools import assert_raises, eq_, ok_
 from nose.plugins.skip import SkipTest
@@ -59,7 +56,8 @@ def test_service():
 
 
 def test_broker_add_remove_worker():
-    broker = Broker()
+    stream = Mock()
+    broker = Broker(stream)
     s1 = Service()
 
     # Broker tracks workers with a dictionary.
@@ -92,7 +90,9 @@ def test_broker_add_remove_worker():
 
 
 def test_register_unregister_worker():
-    broker = Broker()
+    stream = Mock()
+    broker = Broker(stream)
+
     worker_address = 'worker1'
     service_name = 'test_service'
 
@@ -135,25 +135,23 @@ def test_unregister_unknown_worker():
     raise SkipTest()
 
 
-def test_send_listener():
-    # Set up a broker and add a "send" listener
-    broker = Broker()
-    listener = Mock()
-    broker.on_send.add(listener)
+def test_broker_stream_send():
+    # Set up a broker
+    stream = Mock()
+    broker = Broker(stream)
 
     # The broker sends a message...
     broker.send('address', 'message')
 
-    # ...and the message is passed to the send listeners
-    listener.assert_called_once_with('address', 'message')
+    # ...and the message is passed to stream
+    stream.send.assert_called_once_with('address', 'message')
 
 
 # TODO if the broker ever became multithreaded/evented, this model for testing
 #      might not work anymore
 def test_client_request():
-    broker = Broker()
-    listener = Mock()
-    broker.on_send.add(listener)
+    stream = Mock()
+    broker = Broker(stream)
 
     # Register a worker
     worker_address = 'worker1'
@@ -178,16 +176,16 @@ def test_client_request():
     worker = broker.workers[worker_address]
 
     eq_(service.waiting, [])
-    listener.assert_called_once_with(worker_address, (client_address, request_body))
+    stream.send.assert_called_once_with(worker_address, (client_address, request_body))
 
-    listener.reset_mock()
+    stream.reset_mock()
 
     # Simulate the worker's reply
     reply_body = 'reply foo'
     msg = [worker_address, empty_frame, opcodes.REPLY, client_address, reply_body]
     broker.message(msg)
 
-    listener.assert_called_once_with(client_address, reply_body)
+    stream.send.assert_called_once_with(client_address, reply_body)
 
     # Now the the worker has responded, it should be made available for more work
     # i.e. be in the service's waiting queue
@@ -195,9 +193,8 @@ def test_client_request():
 
 
 def test_worker_reply_processes_next_request():
-    broker = Broker()
-    listener = Mock()
-    broker.on_send.add(listener)
+    stream = Mock()
+    broker = Broker(stream)
 
     # Queue up two requests
     client_address = 'client1'
@@ -216,9 +213,9 @@ def test_worker_reply_processes_next_request():
            'beehive.management.register_worker', service_name]
     broker.message(msg)
 
-    listener.assert_called_once_with(worker_address, (client_address, request_1_body))
+    stream.send.assert_called_once_with(worker_address, (client_address, request_1_body))
 
-    listener.reset_mock()
+    stream.reset_mock()
 
     # Simulate the worker's reply.
     msg = [worker_address, empty_frame, opcodes.REPLY, client_address, reply_1_body]
@@ -226,14 +223,13 @@ def test_worker_reply_processes_next_request():
 
     # The reply will be forwarded to the client,
     # and the second request will be sent to the worker.
-    eq_(listener.mock_calls, [call(client_address, reply_1_body),
+    eq_(stream.send.mock_calls, [call(client_address, reply_1_body),
                               call(worker_address, (client_address, request_2_body))])
 
 
 def test_worker_registration_processes_queue_request():
-    broker = Broker()
-    listener = Mock()
-    broker.on_send.add(listener)
+    stream = Mock()
+    broker = Broker(stream)
 
     # Queue a request
     client_address = 'client1'
@@ -252,19 +248,12 @@ def test_worker_registration_processes_queue_request():
     broker.message(msg)
 
     # Assert that the client's request was sent to the worker
-    listener.assert_called_once_with(worker_address, (client_address, request_body))
-
-
-def test_two_clients():
-    broker = Broker()
-    listener = Mock()
-    broker.on_send.add(listener)
+    stream.send.assert_called_once_with(worker_address, (client_address, request_body))
 
 
 def test_service_request_queue():
-    broker = Broker()
-    listener = Mock()
-    broker.on_send.add(listener)
+    stream = Mock()
+    broker = Broker(stream)
 
     # Queue a request
     client_address = 'client1'
@@ -285,9 +274,8 @@ def test_service_request_queue():
 
 
 def test_register_reserved_name():
-    broker = Broker(internal_prefix='some_prefix')
-    listener = Mock()
-    broker.on_send.add(listener)
+    stream = Mock()
+    broker = Broker(stream, internal_prefix='some_prefix')
 
     worker_address = 'worker1'
     service_name = 'some_prefix.test_service'
@@ -300,67 +288,3 @@ def test_register_reserved_name():
         broker.message(msg)
 
     # TODO this error should be returned to the worker
-    
-
-def test_channel_send_from_broker():
-    broker = Mock(wraps=Broker())
-    context = Mock()
-
-    channel = ZMQChannel(broker, context)
-
-    broker.send('address', 'message')
-
-    channel.socket.send_multipart.assert_called_once_with(['address', '', 'message'])
-
-
-def test_simple_connection():
-
-    #endpoint = 'ipc://bar_simple_connection.ipc'
-    endpoint = 'inproc://test_simple_connection'
-
-    context = zmq.Context()
-    broker = Mock(wraps=Broker())
-
-    def make_broker():
-        channel = ZMQChannel(broker, context)
-        channel.bind(endpoint)
-        channel.start()
-
-    t = threading.Thread(target=make_broker)
-    t.daemon = True
-    t.start()
-
-    # TODO this is required to avoid errors like:
-    #      Invalid argument (bundled/zeromq/src/stream_engine.cpp:95)
-    #      and connection refused.
-    #      I don't know why. Something about closing a socket
-    #      that hasn't fully connected? Or maybe the channel's socket hasn't fully bound?
-    #      Seems like Poller is part of this somehow.
-    time.sleep(0.01)
-
-    client = context.socket(zmq.REQ)
-    client_address = 'client socket'
-    client.set(zmq.IDENTITY, client_address)
-    client.connect(endpoint)
-
-    # Send a request to the broker via the socket
-    service_name = 'test_service'
-    msg = [opcodes.REQUEST, service_name, 'request body']
-    client.send_multipart(msg)
-
-    # TODO sucks to sleep for a whole second. need to be able to adjust things
-    #      to make this interval shorter for testing/simulation purposes
-
-    # Wait for message to be received by broker
-    time.sleep(1)
-
-    broker.message.assert_called_once_with([client_address, ''] + msg)
-
-    broker.send(client_address, 'foo')
-
-    time.sleep(1)
-
-    resp = client.recv(zmq.NOBLOCK)
-    eq_(resp, 'foo')
-
-    # TODO clean up the broker/channel thread

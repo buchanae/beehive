@@ -3,8 +3,10 @@ import threading
 import time
 
 import zmq
+from zmq.eventloop.ioloop import IOLoop
+from zmq.eventloop.zmqstream import ZMQStream
 
-from beehive import Broker, ZMQChannel
+from beehive import Broker
 from beehive_worker import BeehiveClient, BeehiveWorker
 
 
@@ -12,10 +14,9 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
 
     context = zmq.Context()
-    broker = Broker()
+    stream = ZMQStream(socket)
 
-    channel = ZMQChannel(broker, context)
-    channel.bind('tcp://*:5555')
+    broker = Broker(stream)
 
     time.sleep(0.1)
 

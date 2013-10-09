@@ -6,6 +6,9 @@ import time
 import msgpack
 import zmq
 
+from zmq.eventloop.ioloop import IOLoop
+from zmq.eventloop.zmqstream import ZMQStream
+
 
 log = logging.getLogger('beehive')
 
@@ -83,40 +86,25 @@ class opcodes:
 
 class ZMQChannel(object):
     
-    # TODO should I pass channel to Broker instead?
-    def __init__(self, broker, context=None, poll_interval=2500):
-        self.broker = broker
+    def __init__(self, context=None):
 
-        if not context:
-            context = zmq.Context()
-        self.context = context
-
-        self.poll_interval = poll_interval
-
+        self.context = context if context else zmq.Context()
         self.socket = self.context.socket(zmq.ROUTER)
-        self.poller = zmq.Poller()
-        self.poller.register(self.socket, zmq.POLLIN)
-
-        self.broker.on_send.add(self.send)
+        self.stream = ZMQStream(self.socket)
+        self.loop = IOLoop.instance()
 
     def bind(self, endpoint):
         self.socket.bind(endpoint)
 
+    def start(self):
+        self.loop.start()
+
+    def on_recv(self, *args, **kwargs):
+        self.stream.on_recv(*args, **kwargs)
+
     # TODO this isn't a very nice/consistent API
     def send(self, address, message):
-        # TODO serialization is hardcoded here
-        #      this also breaks a couple tests
-        serialized = msgpack.packb(message)
-        self.socket.send_multipart([address, '', serialized])
-
-    def start(self):
-
-        while True:
-            items = self.poller.poll(self.poll_interval)
-
-            if items:
-                message = self.socket.recv_multipart()
-                self.broker.message(message)
+        self.stream.send_multipart([address, '', message])
 
 
 # TODO is there a way to do this via string.format?
@@ -129,7 +117,9 @@ def address_str(address):
     
 class Broker(object):
 
-    def __init__(self, internal_prefix='beehive'):
+    def __init__(self, stream, internal_prefix='beehive'):
+        self.stream = stream
+        self.stream.on_recv(self.message)
 
         # TODO would be nice to have a service that you could query for information
         #      on idle services/workers
@@ -148,10 +138,6 @@ class Broker(object):
         self.services = defaultdict(make_service)
         self.workers = {}
 
-        # TODO need to think about renaming a lot of this stuff
-        # TODO this is unordered. would order ever matter?
-        self.on_send = set()
-
     def internal_service(self, name, callback):
         name = self.internal_prefix + '.' + name
         self._internal_services[name] = callback
@@ -161,8 +147,7 @@ class Broker(object):
         pass
 
     def send(self, address, message):
-        for listener in self.on_send:
-            listener(address, message)
+        self.stream.send(address, message)
 
     def message(self, message):
         sender, _, header = message[:3]
