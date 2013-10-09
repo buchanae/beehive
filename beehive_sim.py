@@ -2,52 +2,53 @@ import logging
 import threading
 import time
 
+from tl.testing import thread
+
 from beehive import Broker, ZMQChannel
 from beehive_worker import BeehiveClient, BeehiveWorker
 
 
-if __name__ == '__main__':
+logging.basicConfig(level=logging.INFO)
 
-    logging.basicConfig(level=logging.INFO)
+
+class BeehiveSimulationTest(thread.ThreadAwareTestCase):
 
     endpoint = 'tcp://127.0.0.1:5555'
-
-    def make_broker():
+    
+    def make_broker(self):
         channel = ZMQChannel()
-        channel.bind(endpoint)
+        channel.bind(self.endpoint)
         broker = Broker(channel)
         channel.start()
 
-    def make_worker(n):
-        name = 'worker {}'.format(n)
-        worker = BeehiveWorker(endpoint, 'test_service', name)
+    def make_worker(self):
+        name = 'worker'
+        worker = BeehiveWorker(self.endpoint, 'test_service', name)
         worker.register()
 
-        r = worker.get_work()
-        print 'worker.get_work unpacked', r
-        client_address, request_body = r
+        work = worker.get_work()
+        self.assertEqual(work, ['client', 'foobar'])
+        client_address, request_body = work
         worker.reply(client_address, 'reply ' + request_body)
 
-    def make_client(n):
-        name = 'client {}'.format(n)
-        client = BeehiveClient(endpoint, name)
+    def make_client(self):
+        name = 'client'
+        client = BeehiveClient(self.endpoint, name)
         client.request('test_service', 'foobar')
-        r = client.recv()
-        print 'client recv', r
+        reply = client.recv()
+        self.assertEqual(reply, 'reply foobar')
 
+    def test_simulation(self):
+        self.run_in_thread(self.make_broker)
 
-    a = threading.Thread(target=make_broker)
-    a.daemon = True
-    a.start()
+        time.sleep(0.1)
 
-    time.sleep(0.1)
+        self.run_in_thread(self.make_worker)
+        self.run_in_thread(self.make_client)
 
-    b = threading.Thread(target=make_worker, args=(1,))
-    b.daemon = True
-    b.start()
-
-    c = threading.Thread(target=make_client, args=(1,))
-    c.daemon = True
-    c.start()
-
-    time.sleep(1)
+        # TODO I'm not sure what is the best way to wait for the threads
+        #      simple thread.join() doesn't work, because the channel loops
+        #      forever. Possibly some kind of shutdown signal could be sent.
+        #
+        #      For now, the simplest solution is to sleep
+        time.sleep(0.1)
