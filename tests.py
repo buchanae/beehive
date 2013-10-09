@@ -15,12 +15,12 @@ def test_worker_available():
     worker = Broker.Worker('address', service)
 
     eq_(worker.available, False)
-    eq_(service.waiting, [])
+    eq_(service.idle_workers, [])
 
     # When worker.available is set to True,
     # the worker adds itself to its service's queue
     worker.available = True
-    eq_(service.waiting, [worker])
+    eq_(service.idle_workers, [worker])
 
     # This looks like a funny thing to test, but since Worker.available is a property
     # I want to make sure it returns the proper value.
@@ -29,7 +29,7 @@ def test_worker_available():
     # When worker.available is set to False,
     # the worker removes itself from its service's queue
     worker.available = False
-    eq_(service.waiting, [])
+    eq_(service.idle_workers, [])
     eq_(worker.available, False)
 
 
@@ -44,7 +44,7 @@ def test_service():
 
     # Add a worker
     s.add_worker('worker1')
-    eq_(s.waiting, ['worker1'])
+    eq_(s.idle_workers, ['worker1'])
 
     # Still no work to be done
     eq_(listener.mock_calls, [])
@@ -66,7 +66,7 @@ def test_broker_add_remove_worker():
     eq_(broker.workers, {})
 
     # Service's worker queue is empty
-    eq_(s1.waiting, [])
+    eq_(s1.idle_workers, [])
 
     # Add a worker
     w = Broker.Worker('worker1', s1)
@@ -76,7 +76,7 @@ def test_broker_add_remove_worker():
     eq_(broker.workers, {'worker1': w})
 
     # The broker adds the worker to the service's worker queue
-    eq_(s1.waiting, [w])
+    eq_(s1.idle_workers, [w])
 
     # Trying to add the same worker twice is an error
     with assert_raises(DuplicateWorker):
@@ -85,7 +85,7 @@ def test_broker_add_remove_worker():
     broker.remove_worker(w)
 
     eq_(broker.workers, {})
-    eq_(s1.waiting, [])
+    eq_(s1.idle_workers, [])
 
     # TODO sends worker disconnect signal?
 
@@ -114,7 +114,7 @@ def test_register_unregister_worker():
     service = broker.services[service_name]
 
     # Check that the worker is in the service's queue
-    eq_(service.waiting, [worker])
+    eq_(service.idle_workers, [worker])
     eq_(worker.service, service)
     eq_(worker.available, True)
 
@@ -126,7 +126,7 @@ def test_register_unregister_worker():
     eq_(broker.workers, {})
     # The service stays registered, even though it doesn't have any workers
     eq_(broker.services.keys(), [service_name])
-    eq_(service.waiting, [])
+    eq_(service.idle_workers, [])
 
 
 def test_register_duplicate_worker():
@@ -172,11 +172,11 @@ def test_client_request():
     broker.message(msg)
 
     # The broker should have sent the request to the worker and changed some state
-    # so that the worker is no longer in the service's waiting queue
+    # so that the worker is no longer in the service's idle workers
     service = broker.services[service_name]
     worker = broker.workers[worker_address]
 
-    eq_(service.waiting, [])
+    eq_(service.idle_workers, [])
     stream.send.assert_called_once_with(worker_address, (client_address, request_body))
 
     stream.reset_mock()
@@ -189,8 +189,8 @@ def test_client_request():
     stream.send.assert_called_once_with(client_address, reply_body)
 
     # Now the the worker has responded, it should be made available for more work
-    # i.e. be in the service's waiting queue
-    eq_(service.waiting, [worker])
+    # i.e. be in the service's idle_workers queue
+    eq_(service.idle_workers, [worker])
 
 
 def test_worker_reply_processes_next_request():

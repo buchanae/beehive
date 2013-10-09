@@ -13,8 +13,6 @@ from zmq.eventloop.zmqstream import ZMQStream
 log = logging.getLogger('beehive')
 
 
-
-
 class Error(Exception): pass
 class ErrorTODO(Error): pass
 class ReservedNameError(Error): pass
@@ -117,10 +115,10 @@ class Broker(object):
         def requests(self):
             return list(self.request_queue)
 
-        # TODO change name to idle
         @property
-        def waiting(self):
+        def idle_workers(self):
             return list(self.worker_queue)
+
 
     def __init__(self, stream, internal_prefix='beehive'):
         self.stream = stream
