@@ -52,36 +52,6 @@ def test_worker_available():
     eq_(worker.available, False)
 
 
-@patch('time.time')
-def test_worker_expiry(mock_time):
-    # Mock the value returned by python's time.time() (current time)
-    mock_time.return_value = 10
-
-    # Make sure that Worker starts out with an initial expiry time
-    # current time + expiry interval
-    # If not expiry interval is given, use a default value
-    w = Worker('one', 'foo')
-    eq_(w.expiry, mock_time.return_value + DEFAULT_WORKER_EXPIRATION)
-
-    # Same as above, but give an explicit expiry interval
-    expiration_interval = 20
-    w = Worker('one', 'foo', expiration_interval) 
-    eq_(w.expiry, mock_time.return_value + expiration_interval)
-
-    # Worker should be expired yet, since expiry is in the future
-    assert not w.expired
-
-    # Set the current time to a future time that is past the expiry time.
-    # Worker should be expired now.
-    mock_time.return_value = w.expiry + 1
-    assert w.expired
-
-    # Now "heartbeat" the worker, which updates its expiry time
-    w.heartbeat()
-    assert not w.expired
-    eq_(w.expiry, mock_time.return_value + w.expiry_interval)
-
-
 def test_service():
     s = Service()
     listener = Mock()
@@ -411,6 +381,3 @@ def test_simple_connection():
     eq_(resp, 'foo')
 
     # TODO clean up the broker/channel thread
-
-
-# TODO still lots of heartbeat stuff to work out

@@ -7,32 +7,16 @@ import msgpack
 import zmq
 
 
-DEFAULT_HEARTBEAT_INTERVAL = 2.5 # seconds
-# TODO I don't like the name liveness
-DEFAULT_LIVENESS = 3
-
-DEFAULT_WORKER_EXPIRATION = 2.5 # seconds
-
 log = logging.getLogger('beehive')
 
 
 class Worker(object):
 
-    def __init__(self, address, service, expiry_interval=DEFAULT_WORKER_EXPIRATION):
+    def __init__(self, address, service):
 
         self.address = address
         self.service = service
-        # TODO bad name
-        self.expiry_interval = expiry_interval
-        self.heartbeat()
         self._available = False
-
-    @property
-    def expired(self):
-        return time.time() > self.expiry
-
-    def heartbeat(self):
-        self.expiry = time.time() + self.expiry_interval
 
     @property
     def available(self):
@@ -131,7 +115,8 @@ class ZMQChannel(object):
 
     # TODO this isn't a very nice/consistent API
     def send(self, address, message):
-        # TODO message serialization
+        # TODO serialization is hardcoded here
+        #      this also breaks a couple tests
         serialized = msgpack.packb(message)
         self.socket.send_multipart([address, '', serialized])
 
@@ -155,8 +140,7 @@ def address_str(address):
     
 class Broker(object):
 
-    def __init__(self, heartbeat_interval=DEFAULT_HEARTBEAT_INTERVAL,
-                 internal_prefix='beehive'):
+    def __init__(self, internal_prefix='beehive'):
 
         # TODO would be nice to have a service that you could query for information
         #      on idle services/workers
@@ -164,12 +148,7 @@ class Broker(object):
         self._internal_services = {}
         self.internal_service('management.register_worker', self.register)
         self.internal_service('management.unregister_worker', self.unregister)
-        self.internal_service('management.worker_heartbeat', self.heartbeat)
         self.internal_service('management.list_services', self.list)
-
-        # TODO figure out liveness and heartbeating
-        self.heartbeat_interval = heartbeat_interval
-        self.last_heartbeat = 0
 
         def make_service():
             # TODO dependency injection
@@ -213,7 +192,6 @@ class Broker(object):
         # TODO how to do work on a regular interval with this new separation
         #      of message channel and broker?
         #self.purge_workers()
-        #self.heartbeat()
 
 
     def service_work(self, request, worker):
@@ -245,9 +223,6 @@ class Broker(object):
 
         # TODO validate message. an empty service name would pass
         service = self.services[service_name]
-
-        # TODO worker should tell broker its expiration time
-        heartbeat_interval = 'TODO'
 
         # TODO what happens when you register two workers with the same identity
         #      what does zmq do about duplicate identities connecting to a router?
@@ -327,42 +302,5 @@ class Broker(object):
             '200'
         else:
             '404'
-
-
-    def heartbeat(self, sender):
-        # TODO worker's service name will be included in sender identity
-        #      broker will provide a nice way to lookup workers via services
-        try:
-            worker = self.broker.workers[worker_address]
-        except NoSuchWorker:
-            self.send_disconnect(worker)
-            raise ErrorTODO
-        else:
-            worker.extend_expiry()
-
-
-    def purge_workers(self):
-        # TODO what if you have thousands of workers? this is going to be costly.
-        #      could just purge them as I go to use them, and have a periodic
-        #      cleanup of old ones?
-        for worker in self.workers.values():
-            if worker.expired:
-                self.remove_worker(worker)
-
-    @property
-    def should_heartbeat(self):
-        return time.time() > self.last_heartbeat + self.heartbeat_interval
-
-    def heartbeat(self):
-        if self.should_heartbeat:
-            for service in self.services.values():
-                for worker in service.waiting:
-                    self.send_to_worker(worker, heartbeat, None, None)
-
-            self.last_heartbeat = time.time()
-
-
-# TODO still lots of heartbeat stuff to work out
-#      just remove heartbeat stuff, do a release, and develop heartbeat on a branch
 
 # TODO possibly a service for starting workers?
