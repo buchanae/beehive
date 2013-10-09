@@ -3,7 +3,7 @@ from nose.tools import assert_raises, eq_, ok_
 from nose.plugins.skip import SkipTest
 import zmq
 
-from beehive import *
+from beehive.core import *
 from beehive_worker import *
 
 
@@ -37,7 +37,7 @@ def test_service():
     s = Broker.Service()
     listener = Mock()
 
-    s.on_work.add(listener)
+    s.on_work(listener)
 
     # The service starts out with no work to do.
     eq_(listener.mock_calls, [])
