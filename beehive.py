@@ -202,28 +202,11 @@ class Broker(object):
 
         worker = self.Worker(worker_address, service)
 
-        try:
-            self.add_worker(worker)
+        self.add_worker(worker)
 
-            log_msg = 'Registered worker {} for service {}'
-            log_msg = log_msg.format(address_str(worker.address), service_name)
-            log.info(log_msg)
-
-        except DuplicateWorker:
-            # TODO can't I just ignore this?
-            #      I guess it's possible that the worker could send ready, then
-            #      receive work and start working, and for some reason the ready
-            #      message could be received again. then you'd want to be careful not
-            #      to send more work to the worker since it's already working.
-            #      Futhermore, this makes it possible for a misbehaving worker
-            #      to affect other workers/services that are behaving fine, e.g. if
-            #      a worker from service A tries to register a worker name that 
-            #      service B already registered, then service A's worker should be
-            #      denied, but service B's worker should remain unharmed because it was
-            #      already functioning properly. right? double check that thought.
-            self.remove_worker(worker)
-            msg = 'Multiple "register_worker" commands were received from this worker'
-            raise MultipleRegistrationError(msg)
+        log_msg = 'Registered worker {} for service {}'
+        log_msg = log_msg.format(address_str(worker.address), service_name)
+        log.info(log_msg)
 
 
     def unregister(self, worker_address, message):

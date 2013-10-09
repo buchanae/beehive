@@ -135,10 +135,35 @@ def test_register_unregister_worker():
 
 
 def test_register_duplicate_worker():
-    raise SkipTest()
+    stream = Mock()
+    broker = Broker(stream)
 
-def test_unregister_unknown_worker():
-    raise SkipTest()
+    worker_address = 'worker1'
+    service_name = 'test_service'
+
+    # Send a message to the broker telling it to register worker1 for test_service
+    msg = [worker_address, empty_frame, opcodes.REQUEST,
+           'beehive.management.register_worker', service_name]
+
+    broker.message(msg)
+
+    with assert_raises(DuplicateWorker):
+        broker.message(msg)
+
+    # Check that the broker is now tracking the worker and the service
+    eq_(len(broker.workers), 1)
+
+    eq_(broker.services.keys(), [service_name])
+    eq_(broker.workers.keys(), [worker_address])
+
+    # Get the Worker and Service objects from the broker
+    worker = broker.workers[worker_address]
+    service = broker.services[service_name]
+
+    # Check that the worker is in the service's queue
+    eq_(service.idle_workers, [worker])
+    eq_(worker.service, service)
+    eq_(worker.available, True)
 
 
 def test_broker_stream_send():
