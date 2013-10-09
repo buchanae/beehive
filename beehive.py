@@ -19,6 +19,7 @@ class ReservedNameError(Error): pass
 class DuplicateWorker(Error): pass
 class MultipleRegistrationError(Error): pass
 class InvalidServiceName(Error): pass
+class UnknownWorker(Error): pass
 # TODO errors should be caught and return to client, if appropriate
 
 
@@ -164,11 +165,6 @@ class Broker(object):
         else:
             raise InvalidCommand(header)
 
-        # TODO necessary?
-        # TODO how to do work on a regular interval with this new separation
-        #      of message channel and broker?
-        #self.purge_workers()
-
 
     def service_work(self, request, worker):
         log.info('Servicing request {}'.format(request))
@@ -185,8 +181,12 @@ class Broker(object):
 
     def remove_worker(self, worker):
         # TODO catch KeyError here
-        del self.workers[worker.address]
-        worker.available = False
+        try:
+            del self.workers[worker.address]
+            worker.available = False
+
+        except KeyError:
+            raise UnknownWorker(worker)
         # TODO send disconnect?
 
 

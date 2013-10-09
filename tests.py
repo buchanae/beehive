@@ -87,6 +87,8 @@ def test_broker_add_remove_worker():
     eq_(broker.workers, {})
     eq_(s1.idle_workers, [])
 
+    with assert_raises(UnknownWorker):
+        broker.remove_worker(w)
     # TODO sends worker disconnect signal?
 
 
