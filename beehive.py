@@ -75,6 +75,7 @@ class ErrorTODO(Error): pass
 class ReservedNameError(Error): pass
 class DuplicateWorker(Error): pass
 class MultipleRegistrationError(Error): pass
+class InvalidServiceName(Error): pass
 # TODO errors should be caught and return to client, if appropriate
 
 
@@ -198,7 +199,9 @@ class Broker(object):
             msg = self.internal_prefix + '.* is reserved for internal sevices'
             raise ReservedNameError(msg)
 
-        # TODO validate message. an empty service name would pass
+        if not service_name:
+            raise InvalidServiceName(service_name)
+
         service = self.services[service_name]
 
         # TODO what happens when you register two workers with the same identity

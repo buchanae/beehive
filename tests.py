@@ -296,3 +296,18 @@ def test_client_identity():
 
     client.identity = 'foo'
     eq_(client.identity, 'foo')
+
+
+def test_register_empty_service_name():
+    stream = Mock()
+    broker = Broker(stream)
+
+    worker_address = 'worker1'
+    service_name = ''
+
+    # Send a message to the broker telling it to register worker1 for test_service
+    msg = [worker_address, empty_frame, opcodes.REQUEST,
+           'beehive.management.register_worker', service_name]
+
+    with assert_raises(InvalidServiceName):
+        broker.message(msg)
