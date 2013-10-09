@@ -130,6 +130,9 @@ def test_register_unregister_worker():
     eq_(broker.services.keys(), [service_name])
     eq_(service.idle_workers, [])
 
+    with assert_raises(UnknownWorker):
+        broker.message(msg)
+
 
 def test_register_duplicate_worker():
     raise SkipTest()

@@ -180,19 +180,17 @@ class Broker(object):
 
 
     def remove_worker(self, worker):
-        # TODO catch KeyError here
         try:
             del self.workers[worker.address]
             worker.available = False
 
         except KeyError:
-            raise UnknownWorker(worker)
+            raise UnknownWorker(worker.address)
         # TODO send disconnect?
 
 
     def register(self, worker_address, service_name):
 
-        # TODO move to add_worker?
         if service_name.startswith(self.internal_prefix):
             msg = self.internal_prefix + '.* is reserved for internal sevices'
             raise ReservedNameError(msg)
@@ -231,32 +229,28 @@ class Broker(object):
     def unregister(self, worker_address, message):
         try:
             worker = self.workers[worker_address]
+        except KeyError:
+            raise UnknownWorker(worker_address)
+        else:
             self.remove_worker(worker)
 
             log_msg = 'Unregistered worker {}'
             log_msg = log_msg.format(address_str(worker.address))
             log.info(log_msg)
 
-        except KeyError:
-            # TODO should return an appropriate error?
-            pass
-
 
     def request(self, client_address, message):
         service_name, request_body = message
 
-        try:
+        if service_name in self._internal_services:
             callback = self._internal_services[service_name]
             log.info('Processing internal service request')
             callback(client_address, request_body)
-
-        except KeyError:
+        else:
             # The request is for an external service
             service = self.services[service_name]
             log.info('Queueing request for {}'.format(service_name))
             service.add_request(client_address, request_body)
-
-           # TODO  self.purge_workers()
 
 
     def reply(self, worker_address, message):
