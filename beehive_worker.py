@@ -10,17 +10,23 @@ log = logging.getLogger('client')
 
 
 class BeehiveClient(object):
-    def __init__(self, endpoint, client_ID=None, context=None):
+
+    def __init__(self, context=None):
         if not context:
             context = zmq.Context()
         self.context = context
         self.socket = context.socket(zmq.DEALER)
 
-        if client_ID:
-            self.socket.set(zmq.IDENTITY, client_ID)
+    @property
+    def identity(self):
+        return self.socket.get(zmq.IDENTITY)
 
+    @identity.setter
+    def identity(self, value):
+        self.socket.set(zmq.IDENTITY, value)
+
+    def connect(self, endpoint):
         self.socket.connect(endpoint)
-
 
     def request(self, service_name, request_body):
         msg = ['', beehive.opcodes.REQUEST, service_name, request_body]
@@ -39,8 +45,8 @@ class BeehiveClient(object):
 
 class BeehiveWorker(BeehiveClient):
 
-    def __init__(self, endpoint, service_name, worker_ID=None, context=None):
-        super(BeehiveWorker, self).__init__(endpoint, worker_ID, context)
+    def __init__(self, service_name, context=None):
+        super(BeehiveWorker, self).__init__(context)
 
         self.service_name = service_name
 

@@ -23,7 +23,9 @@ class BeehiveSimulationTest(thread.ThreadAwareTestCase):
 
     def make_worker(self):
         name = 'worker'
-        worker = BeehiveWorker(self.endpoint, 'test_service', name)
+        worker = BeehiveWorker('test_service')
+        worker.identity = name
+        worker.connect(self.endpoint)
         worker.register()
 
         work = worker.get_work()
@@ -33,7 +35,8 @@ class BeehiveSimulationTest(thread.ThreadAwareTestCase):
 
     def make_client(self):
         name = 'client'
-        client = BeehiveClient(self.endpoint, name)
+        client = BeehiveClient()
+        client.identity = name
         client.request('test_service', 'foobar')
         reply = client.recv()
         self.assertEqual(reply, 'reply foobar')
