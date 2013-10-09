@@ -29,6 +29,7 @@ class BeehiveClient(object):
         self.socket.connect(endpoint)
 
     def request(self, service_name, request_body):
+        # TODO add job ID and futures
         msg = ['', beehive.opcodes.REQUEST, service_name, request_body]
         self.socket.send_multipart(msg)
 
@@ -37,22 +38,19 @@ class BeehiveClient(object):
         msg = ['', beehive.opcodes.REPLY, destination, reply_body]
         self.socket.send_multipart(msg)
 
+    def unpack(self, message):
+        return msgpack.unpackb(message)
+
     def recv(self):
         message = self.socket.recv_multipart()[1]
-        unpacked = msgpack.unpackb(message)
-        return unpacked
+        return self.unpack(message)
 
 
 class BeehiveWorker(BeehiveClient):
 
     def __init__(self, service_name, context=None):
         super(BeehiveWorker, self).__init__(context)
-
         self.service_name = service_name
-
-        # TODO this should have failed
-        #self.request('beehive.management.register_worker', '')
-
 
     def register(self):
         self.request('beehive.management.register_worker', self.service_name)
