@@ -34,6 +34,8 @@ class ZMQChannel(object):
     def __init__(self, context=None):
 
         self.context = context if context else zmq.Context()
+        # TODO can I/should I separate the socket from the channel
+        #      so that I can reuse this for clients?
         self.socket = self.context.socket(zmq.ROUTER)
         self.stream = ZMQStream(self.socket)
         self.loop = IOLoop.instance()
@@ -300,6 +302,8 @@ class Broker(object):
             log_msg = log_msg.format(address_str(worker.address))
             log.info(log_msg)
 
+    # TODO what happens when a request is sent to a worker and that worker dies?
+    #      should the client retry the request? or should the broker?
 
     # TODO rename to handle_request or process_request
     def request(self, client_address, message):
@@ -322,8 +326,6 @@ class Broker(object):
         """Handle a reply message from a worker to a client."""
 
         client_address, reply_body = message
-        # TODO this should include job/request ID so the client knows
-        #      what it's getting if it was an async request
         log.info('Replying to {} with {}'.format(client_address, reply_body))
         self.send(client_address, reply_body)
         worker = self.workers[worker_address]
