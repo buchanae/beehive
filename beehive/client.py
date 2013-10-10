@@ -1,6 +1,6 @@
+from itertools import count
 import logging
 import threading
-import uuid
 from Queue import Queue
 
 from futures import Future
@@ -17,9 +17,13 @@ empty_frame = ''
 log = logging.getLogger('client')
 
 
+# TODO Listener is a poor name
 class Listener(threading.Thread):
-    def __init__(self, context=None):
+    def __init__(self, identity=None, context=None):
         super(Listener, self).__init__()
+
+        self._identity = identity
+
         if not context:
             context = zmq.Context()
         self.context = context
@@ -32,17 +36,18 @@ class Listener(threading.Thread):
     def run(self):
         log.info('Running listener')
 
+        request_IDs = (str(ID) for ID in count())
         request_futures = {}
         socket = self.context.socket(zmq.DEALER)
-        # TODO should each client have its own listener thread, so that each client can have its own identity?
-        #      does socket identity really matter that much? client identity could be sent as part of the message.
-        #      what would happen if two clients gave the same identity?
-        #
-        #      A related topic is mentioned in the zguide regarding full messages queues and blocking sends.
-        #
-        #      if request IDs aren't globally unique, then client id needs to be unique per process so that
-        #      two clients wouldn't both be sent the same reply, while only one would have the valid request id.
-        #socket.set(zmq.IDENTITY, identity)
+
+        # TODO document that two clients having the same identity will
+        #      produce unknown results and it's better to avoid.
+
+        # TODO consider topic in zguide about non blocking sends
+        #      and full message queues
+
+        if self._identity:
+            socket.set(zmq.IDENTITY, self._identity)
 
         poller = zmq.Poller()
         poller.register(socket, zmq.POLLIN)
@@ -63,43 +68,32 @@ class Listener(threading.Thread):
                 else:
                     handler(*args, **kwargs)
 
-            while not self._request_queue.empty():
-                req = self._request_queue.get()
+            # TODO figure out proper shutdown. see futures/thread.py
 
-                if req is not None:
-                    outgoing, future = req
-                    request_id = self.make_request_id()
-                    request_futures[request_id] = future
-                    # We need to prefix an empty frame in order to make
-                    # a zmq.DEALER socket emulate a zmq.REQ
-                    msg = [empty_frame, request_id, outgoing]
-                    socket.send_multipart(msg)
-                    log.info('foob')
-                    self._request_queue.task_done()
-                    log.info('Sent request')
+            while not self._request_queue.empty():
+                message, future = self._request_queue.get()
+
+                # Store the future so that we can access it by request_ID
+                # when the reply arrives.
+                request_ID = request_IDs.next()
+                request_futures[request_ID] = future
+
+                # Prefix an empty frame to make the zmq.DEALER socket emulate a zmq.REQ
+                socket.send_multipart([empty_frame, request_ID, message])
+
+                self._request_queue.task_done()
+                log.info('Sent request')
 
             socks = dict(poller.poll(1))
 
             if socks.get(socket) == zmq.POLLIN:
                 log.info('Waiting for reply')
-                _, request_id, reply = socket.recv_multipart()
-                future = request_futures[request_id]
+                _, request_ID, reply = socket.recv_multipart()
+                future = request_futures[request_ID]
                 future.set_result(reply)
 
 
-            # TODO figure out proper shutdown. see futures/thread.py
-
-    def make_request_id(self):
-        """Return a new request ID.
-
-        This must be guaranteed to be unique .... TODO.
-        Doesn't this only need to be unique within the Listener?
-        If so, couldn't it just be an incrementing number?
-        
-        """
-        # TODO optimize?
-        return uuid.uuid4().bytes
-
+    # TODO request should be send? or should have a separate send method?
     def request(self, message):
         future = Future()
         request = message, future
@@ -126,17 +120,6 @@ class Client(object):
 
         self.listener = listener
 
-    @property
-    def identity(self):
-        """Get/set the zeromq socket identity."""
-        # TODO
-        pass
-
-    @identity.setter
-    def identity(self, value):
-        # TODO
-        pass
-
     def connect(self, address):
         """Connect this client to an endpoint.
 
@@ -153,7 +136,7 @@ class Client(object):
 
     def send(self, message):
         packed_message = self.pack(message)
-        return self.channel.send(message) # TODO channel/listener/whatever send/request/whatever
+        return self.listener.request(message)
 
     def request(self, service_name, request_body):
         """Send a request to a service."""
@@ -162,19 +145,22 @@ class Client(object):
         #      that is set later by the broker, which means the client definitely
         #      requires the broker. is that bad?
         #      A socket knows its own identity right? So it _could_ be added.
+
+        # TODO if the request body was very large, we'd have to unpack all that
+        #      in the broker just to get the address. also, the broker needs to
+        #      understand the serialization of the message. seems like the envelope
+        #      should have its own frame.
         request = {
             'opcode': beehive.core.opcodes.REQUEST,
             'service': service_name,
-            'id': self.make_request_id(),
             'body': request_body,
         }
         return self.send(request)
 
-    def reply(self, destination, request_id, reply_body):
+    def reply(self, destination, request_ID, reply_body):
         reply = {
             'opcode': beehive.core.opcodes.REPLY,
             'destination': destination,
-            'request_id': request_id,
             'body': reply_body,
         }
         return self.send(reply)
