@@ -332,3 +332,13 @@ def test_register_empty_service_name():
 
     with assert_raises(InvalidServiceName):
         broker.message(msg)
+
+
+def test_invalid_command():
+    stream = Mock()
+    broker = Broker(stream)
+    
+    msg = ['address', empty_frame, 'invalid opcode']
+    with assert_raises(InvalidCommand):
+        broker.message(msg)
+    assert False

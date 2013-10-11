@@ -20,6 +20,7 @@ class DuplicateWorker(Error): pass
 class MultipleRegistrationError(Error): pass
 class InvalidServiceName(Error): pass
 class UnknownWorker(Error): pass
+class InvalidCommand(Error): pass
 # TODO errors should be caught and return to client, if appropriate
 
 
@@ -232,6 +233,7 @@ class Broker(object):
         elif header == opcodes.REPLY:
             self.reply(sender, rest)
         else:
+            # TODO invalid opcode is a better name?
             raise InvalidCommand(header)
 
 
@@ -309,6 +311,7 @@ class Broker(object):
     def request(self, client_address, message):
         """Handle an incoming request."""
 
+        # TODO how is test_simulation working? how is it getting the service name?
         service_name, request_body = message
 
         if service_name in self._internal_services:
