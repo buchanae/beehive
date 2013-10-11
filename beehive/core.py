@@ -244,6 +244,7 @@ class Broker(object):
 
         """
         log.info('Servicing request {}'.format(request))
+        # TODO add opcode so that client knows this is a work request
         self.send(worker.address, request)
 
 
