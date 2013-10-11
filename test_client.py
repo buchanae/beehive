@@ -24,20 +24,19 @@ if __name__ == '__main__':
             req_id = m.pop(0)
             print 'end received', m
             x = [req_id, 'return'] + m
-            socket.send_multipart(m)
+            socket.send_multipart(x)
 
 
     t = threading.Thread(target=bouncer)
     t.daemon = True
     t.start()
 
-    #listener = Listener('inproc://test', context=context)
-    #listener.start()
+    listener = Listener('inproc://test', context=context)
+    listener.start()
 
     time.sleep(0.5)
 
-    client = Client()
-    client.connect('inproc://test')
+    client = Client(listener)
 
 
     futures = []

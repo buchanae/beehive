@@ -61,7 +61,7 @@ class Listener(threading.Thread):
             request_futures[request_ID] = future
 
             # Prefix an empty frame to make the zmq.DEALER socket emulate a zmq.REQ
-            socket.send_multipart([empty_frame, request_ID, message])
+            socket.send_multipart([empty_frame, request_ID] + message)
 
             log.info('Sent request')
 
@@ -101,10 +101,12 @@ class Listener(threading.Thread):
 
             if socks.get(socket) == zmq.POLLIN:
                 log.info('Waiting for reply')
-                # TODO if more frames are sent, this will fail to unpack
-                _, request_ID, reply = socket.recv_multipart()
+                m = socket.recv_multipart()
+                # Discard the empty frame
+                m.pop(0)
+                request_ID = m.pop(0)
                 future = request_futures[request_ID]
-                future.set_result(reply)
+                future.set_result(m)
                 # TODO make use of set_exception
 
     def _enqueue(self, op, *args, **kwargs):
