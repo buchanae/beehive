@@ -169,7 +169,7 @@ class Client(object):
 
     def reply(self, destination, request_ID, reply_body):
         packed_body = self.pack(reply_body)
-        message = [opcodes.REPLY, request_ID, packed_body]
+        message = [opcodes.REPLY, destination, request_ID, packed_body]
         return self.listener.send(message)
 
 # TODO there's a big missing piece, and a difference between worker and client
