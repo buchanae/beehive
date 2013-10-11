@@ -13,7 +13,7 @@ if __name__ == '__main__':
     
     context = zmq.Context()
 
-    def end():
+    def bouncer():
         socket = context.socket(zmq.REP)
         socket.bind('inproc://test')
 
@@ -21,23 +21,35 @@ if __name__ == '__main__':
 
         while True:
             m = socket.recv_multipart()
-            req_id, msg = m
+            req_id = m.pop(0)
             print 'end received', m
-            x = [req_id, msg + ' back']
-            socket.send_multipart(x)
+            x = [req_id, 'return'] + m
+            socket.send_multipart(m)
 
 
-    t = threading.Thread(target=end)
+    t = threading.Thread(target=bouncer)
     t.daemon = True
     t.start()
 
-    listener = Listener(context=context)
-    listener.start()
-    listener.connect('inproc://test')
+    #listener = Listener('inproc://test', context=context)
+    #listener.start()
+
+    time.sleep(0.5)
+
+    client = Client()
+    client.connect('inproc://test')
+
 
     futures = []
-    for x in xrange(10):
-        f = listener.request(str(x))
+    for x in (str(x) for x in xrange(10)):
+        #f = listener.request(str(x))
+        # TODO woah, got a segfault from python. weird.
+        #      something to do with threading
+        #
+        # f = client.request()
+        # TypeError: request() takes exactly 3 arguments (1 given)
+        # Segmentation fault
+        f = client.request('service name', x)
         futures.append((x, f))
 
     for x, f in futures:
