@@ -24,6 +24,7 @@ class BeehiveSimulationTest(thread.ThreadAwareTestCase):
     def make_worker(self):
         name = 'worker'
         worker = BeehiveWorker('test_service')
+        # TODO remove identity
         worker.identity = name
         worker.connect(self.endpoint)
         worker.register()

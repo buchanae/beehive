@@ -30,6 +30,11 @@ class opcodes:
     REPLY = 'reply'
 
 
+# TODO caching requests in redis/memcache could add resilency
+# TODO how long to hold on to results? What if the client never picks them up?
+#      at some point, rabbitmq is better. build an interface where the backend
+#      could be easily replaced.
+
 class ZMQChannel(object):
     
     def __init__(self, context=None):
@@ -43,6 +48,9 @@ class ZMQChannel(object):
 
     def bind(self, endpoint):
         self.socket.bind(endpoint)
+
+    def connect(self, endpoint):
+        self.socket.connect(endpoint)
 
     def start(self):
         self.loop.start()
@@ -175,6 +183,7 @@ class Broker(object):
     Worker = Worker
 
     # TODO should rename stream to channel?
+    # TODO service for starting workers
     def __init__(self, stream, internal_prefix='beehive'):
         self.stream = stream
         self.stream.on_recv(self.message)
@@ -195,6 +204,7 @@ class Broker(object):
         self.services = defaultdict(make_service)
         self.workers = {}
 
+        log.debug('Broker initialized')
 
 
     def internal_service(self, name, callback):
@@ -223,15 +233,17 @@ class Broker(object):
     def message(self, message):
         """Process an incoming message."""
 
+        log.debug('Received message')
+
         sender, _, header = message[:3]
         rest = message[3:]
 
         assert _ == ''
 
         if header == opcodes.REQUEST:
-            self.request(sender, rest)
+            self.handle_request(sender, rest)
         elif header == opcodes.REPLY:
-            self.reply(sender, rest)
+            self.handle_reply(sender, rest)
         else:
             # TODO invalid opcode is a better name?
             raise InvalidCommand(header)
@@ -275,9 +287,11 @@ class Broker(object):
 
         if service_name.startswith(self.internal_prefix):
             msg = self.internal_prefix + '.* is reserved for internal sevices'
+            log.error(msg)
             raise ReservedNameError(msg)
 
         if not service_name:
+            log.error('Invalid service name: {}'.format(service_name))
             raise InvalidServiceName(service_name)
 
         service = self.services[service_name]
@@ -309,29 +323,30 @@ class Broker(object):
     #      should the client retry the request? or should the broker?
 
     # TODO rename to handle_request or process_request
-    def request(self, client_address, message):
+    def handle_request(self, client_address, message):
         """Handle an incoming request."""
 
         # TODO how is test_simulation working? how is it getting the service name?
-        service_name, request_body = message
+        service_name = message.pop(0)
 
         if service_name in self._internal_services:
             callback = self._internal_services[service_name]
             log.info('Processing internal service request')
-            callback(client_address, request_body)
+            callback(client_address, message)
         else:
             # The request is for an external service
             service = self.services[service_name]
             log.info('Queueing request for {}'.format(service_name))
-            service.add_request(client_address, request_body)
+            service.add_request(client_address, message)
 
 
-    def reply(self, worker_address, message):
+    def handle_reply(self, worker_address, message):
         """Handle a reply message from a worker to a client."""
 
-        client_address, reply_body = message
-        log.info('Replying to {} with {}'.format(client_address, reply_body))
-        self.send(client_address, reply_body)
+        client_address = message.pop(0)
+
+        log.info('Replying to {}'.format(client_address))
+        self.send(client_address, message)
         worker = self.workers[worker_address]
         worker.idle = True
 

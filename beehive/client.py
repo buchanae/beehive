@@ -72,18 +72,20 @@ class Client(object):
         self._send(opcodes.REPLY, destination, request_ID, body)
 
 
+# TODO how would one worker register multiple services but still
+#      only handle one request at a time?
 class Worker(Client):
 
-    def __init__(self, service_name, context=None):
-        super(Worker, self).__init__(context)
+    def __init__(self, service_name, channel):
+        super(Worker, self).__init__(channel)
         self.service_name = service_name
         self.on_request(self.handle_request)
 
     def register(self):
-        self.request('beehive.management.register_worker', self.service_name)
+        self.send_request('beehive.management.register_worker', self.service_name)
 
     def unregister(self):
-        self.request('beehive.management.unregister_worker', '')
+        self.send_request('beehive.management.unregister_worker', '')
 
     def handle_request(self, message):
         log.info('Got work')
